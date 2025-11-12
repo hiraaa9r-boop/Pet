@@ -3,9 +3,9 @@
  * Tests core functionality like health check and 404 handling
  */
 
-import { describe, it, expect } from 'vitest';
-import request from 'supertest';
 import express from 'express';
+import request from 'supertest';
+import { describe, it, expect } from 'vitest';
 
 // Create a minimal test app without Firebase dependencies
 const testApp = express();
