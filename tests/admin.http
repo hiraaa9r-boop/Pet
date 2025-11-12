@@ -1,0 +1,61 @@
+###
+# MyPetCare Admin API Tests
+# VS Code REST Client Extension Required
+# https://marketplace.visualstudio.com/items?itemName=humao.rest-client
+###
+
+@baseUrl = https://api.mypetcare.app
+# Inserisci qui un ID Token Firebase di un utente con ruolo admin:
+@token = {{$processEnv FIREBASE_ADMIN_ID_TOKEN}}
+
+###
+# 1) Health Check - Verifica stato server
+GET {{baseUrl}}/health
+Accept: application/json
+
+###
+# 2) Admin Stats - Dashboard analytics
+GET {{baseUrl}}/admin/stats
+Authorization: Bearer {{token}}
+Accept: application/json
+
+###
+# 3) Refund Totale - Rimborso completo pagamento
+# Sostituisci :paymentId con l'ID presente in Firestore /payments/{id}
+# Esempio: in_1234567890 (Stripe invoice) o ch_1234567890 (Stripe charge)
+POST {{baseUrl}}/admin/refund/PAYMENT_ID_HERE
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+###
+# 4) Refund Parziale - Rimborso importo specifico
+# amountCents: importo in centesimi (es. 499 = €4.99)
+POST {{baseUrl}}/admin/refund/PAYMENT_ID_HERE
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "amountCents": 499
+}
+
+###
+# 5) Test Stripe Payment ID (Invoice)
+# Esempio con invoice ID reale
+POST {{baseUrl}}/admin/refund/in_1PQzEL2eZvKYlo2C8KKfQjXt
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "amountCents": 999
+}
+
+###
+# 6) Test PayPal Payment ID (Capture)
+# Esempio con PayPal capture ID
+POST {{baseUrl}}/admin/refund/8LW12345X6789012K
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "amountCents": 999
+}

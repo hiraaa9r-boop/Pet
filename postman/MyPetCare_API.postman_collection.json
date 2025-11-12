@@ -1,0 +1,450 @@
+{
+  "info": {
+    "name": "MyPetCare API - Complete Collection",
+    "description": "API endpoints per testing MyPetCare backend (Sandbox & Production)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "mypetcare-api-v1",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{FIREBASE_ID_TOKEN}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Get Firebase ID Token (Info)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{FIREBASE_API_KEY}}",
+              "protocol": "https",
+              "host": ["identitytoolkit", "googleapis", "com"],
+              "path": ["v1", "accounts:signInWithPassword"],
+              "query": [
+                {
+                  "key": "key",
+                  "value": "{{FIREBASE_API_KEY}}"
+                }
+              ]
+            },
+            "description": "Firebase Authentication - Ottieni ID Token per test\n\nBody JSON:\n{\n  \"email\": \"owner.test+1@mypetcare.it\",\n  \"password\": \"Test!2345\",\n  \"returnSecureToken\": true\n}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Professionisti (PRO)",
+      "item": [
+        {
+          "name": "Get All PROs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/pros",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pros"]
+            },
+            "description": "Recupera lista di tutti i professionisti attivi"
+          },
+          "response": []
+        },
+        {
+          "name": "Get PRO by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/pros/:proId",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pros", ":proId"],
+              "variable": [
+                {
+                  "key": "proId",
+                  "value": "pro-test-1"
+                }
+              ]
+            },
+            "description": "Dettaglio profilo PRO singolo"
+          },
+          "response": []
+        },
+        {
+          "name": "Create PRO (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Veterinario Test\",\n  \"bio\": \"Veterinario con 15 anni di esperienza\",\n  \"specialties\": [\"Veterinaria\", \"Chirurgia\"],\n  \"services\": [\n    {\n      \"name\": \"Visita generale\",\n      \"minutes\": 30,\n      \"price\": 50\n    },\n    {\n      \"name\": \"Vaccinazione\",\n      \"minutes\": 15,\n      \"price\": 30\n    }\n  ],\n  \"geo\": {\n    \"lat\": 40.7274,\n    \"lng\": 8.5606,\n    \"address\": \"Sassari, Italia\"\n  },\n  \"active\": true\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/pros",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pros"]
+            },
+            "description": "Crea nuovo profilo PRO (richiede autenticazione Admin)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update PRO",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bio\": \"Bio aggiornata con nuove certificazioni\",\n  \"services\": [\n    {\n      \"name\": \"Visita generale\",\n      \"minutes\": 30,\n      \"price\": 55\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/pros/:proId",
+              "host": ["{{BASE_URL}}"],
+              "path": ["pros", ":proId"],
+              "variable": [
+                {
+                  "key": "proId",
+                  "value": "pro-test-1"
+                }
+              ]
+            },
+            "description": "Aggiorna profilo PRO (owner o admin)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Calendari",
+      "item": [
+        {
+          "name": "Get PRO Calendar",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/calendars/:proId",
+              "host": ["{{BASE_URL}}"],
+              "path": ["calendars", ":proId"],
+              "variable": [
+                {
+                  "key": "proId",
+                  "value": "pro-test-1"
+                }
+              ]
+            },
+            "description": "Recupera calendario disponibilità PRO"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Calendar Slots",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slots\": [\n    {\n      \"date\": \"2025-12-15\",\n      \"start\": \"09:00\",\n      \"end\": \"13:00\",\n      \"step\": 30,\n      \"capacity\": 4\n    },\n    {\n      \"date\": \"2025-12-15\",\n      \"start\": \"14:00\",\n      \"end\": \"18:00\",\n      \"step\": 30,\n      \"capacity\": 4\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/calendars/:proId/slots",
+              "host": ["{{BASE_URL}}"],
+              "path": ["calendars", ":proId", "slots"],
+              "variable": [
+                {
+                  "key": "proId",
+                  "value": "pro-test-1"
+                }
+              ]
+            },
+            "description": "Crea slot di disponibilità (richiede auth PRO owner)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "Create Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"proId\": \"pro-test-1\",\n  \"serviceId\": \"service-1\",\n  \"serviceName\": \"Visita base\",\n  \"date\": \"2025-12-15\",\n  \"startTime\": \"09:00\",\n  \"duration\": 30,\n  \"price\": 35,\n  \"petName\": \"Fido\",\n  \"petType\": \"dog\",\n  \"notes\": \"Prima visita, cane anziano\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/bookings",
+              "host": ["{{BASE_URL}}"],
+              "path": ["bookings"]
+            },
+            "description": "Crea nuova prenotazione (richiede autenticazione Owner)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Booking Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/bookings/:bookingId",
+              "host": ["{{BASE_URL}}"],
+              "path": ["bookings", ":bookingId"],
+              "variable": [
+                {
+                  "key": "bookingId",
+                  "value": "booking-123"
+                }
+              ]
+            },
+            "description": "Dettaglio prenotazione singola"
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Imprevisto\",\n  \"requestRefund\": true\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/bookings/:bookingId/cancel",
+              "host": ["{{BASE_URL}}"],
+              "path": ["bookings", ":bookingId", "cancel"],
+              "variable": [
+                {
+                  "key": "bookingId",
+                  "value": "booking-123"
+                }
+              ]
+            },
+            "description": "Cancella prenotazione (owner o pro)"
+          },
+          "response": []
+        },
+        {
+          "name": "Refund Booking (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 35,\n  \"reason\": \"Richiesta utente\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/bookings/:bookingId/refund",
+              "host": ["{{BASE_URL}}"],
+              "path": ["bookings", ":bookingId", "refund"],
+              "variable": [
+                {
+                  "key": "bookingId",
+                  "value": "booking-123"
+                }
+              ]
+            },
+            "description": "Rimborso prenotazione (solo Admin)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Stripe Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethodId\": \"pm_card_visa\",\n  \"priceId\": \"price_monthly_pro\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/payments/stripe/subscribe",
+              "host": ["{{BASE_URL}}"],
+              "path": ["payments", "stripe", "subscribe"]
+            },
+            "description": "Crea sottoscrizione Stripe PRO"
+          },
+          "response": []
+        },
+        {
+          "name": "Create PayPal Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"P-123456789\",\n  \"returnUrl\": \"https://mypetcare.it/payment/success\",\n  \"cancelUrl\": \"https://mypetcare.it/payment/cancel\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/payments/paypal/subscribe",
+              "host": ["{{BASE_URL}}"],
+              "path": ["payments", "paypal", "subscribe"]
+            },
+            "description": "Crea sottoscrizione PayPal PRO"
+          },
+          "response": []
+        },
+        {
+          "name": "Apply Coupon",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"couponCode\": \"{{COUPON}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/coupons/apply",
+              "host": ["{{BASE_URL}}"],
+              "path": ["coupons", "apply"]
+            },
+            "description": "Applica coupon (FREE-1M, FREE-3M, FREE-12M)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks (Local Testing Only)",
+      "item": [
+        {
+          "name": "Test Stripe Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Stripe-Signature",
+                "value": "test_signature"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"invoice.payment_succeeded\",\n  \"data\": {\n    \"object\": {\n      \"customer\": \"cus_test123\",\n      \"subscription\": \"sub_test123\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/webhooks/stripe",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["webhooks", "stripe"]
+            },
+            "description": "⚠️ SOLO per testing locale con stripe CLI"
+          },
+          "response": []
+        },
+        {
+          "name": "Test PayPal Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_type\": \"BILLING.SUBSCRIPTION.ACTIVATED\",\n  \"resource\": {\n    \"id\": \"I-TEST123\",\n    \"custom_id\": \"user-test-1\"\n  }\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/webhooks/paypal",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["webhooks", "paypal"]
+            },
+            "description": "⚠️ SOLO per testing locale PayPal sandbox"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,289 @@
+{
+  "info": {
+    "name": "MyPetCare Admin API",
+    "description": "Collection Postman per testare gli endpoint Admin di MyPetCare (stats e refund). Richiede Environment Variables: baseUrl, adminToken, paymentId",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        },
+        "description": "Verifica che il server backend sia attivo e funzionante"
+      },
+      "response": []
+    },
+    {
+      "name": "GET /admin/stats",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/admin/stats",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "stats"]
+        },
+        "description": "Ottiene statistiche aggregate:\n- usersTotal: Numero totale utenti\n- activePros: Numero PRO attivi\n- revenue30d: Entrate ultimi 30 giorni (€)\n- bookings30d: Prenotazioni ultimi 30 giorni\n\nRichiede: Token Firebase ID di un utente con ruolo admin"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "stats"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"usersTotal\": 523,\n  \"activePros\": 47,\n  \"revenue30d\": 12450.00,\n  \"bookings30d\": 189\n}"
+        }
+      ]
+    },
+    {
+      "name": "POST /admin/refund/:paymentId (Totale)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "{{baseUrl}}/admin/refund/{{paymentId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "refund", "{{paymentId}}"]
+        },
+        "description": "Rimborso TOTALE di un pagamento esistente.\n\nSupporta automaticamente:\n- Stripe (charge, payment_intent, invoice)\n- PayPal (capture_id)\n\nRichiede:\n- adminToken: Token Firebase ID utente admin\n- paymentId: ID documento Firestore del pagamento\n\nNOTA: Body vuoto = rimborso totale"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": ""
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/refund/pay_abc123",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "refund", "pay_abc123"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"success\": true,\n  \"refund\": {\n    \"id\": \"re_1PQzEL2eZvKYlo2C0D5C9mVj\",\n    \"amount\": 2999,\n    \"status\": \"succeeded\",\n    \"created\": 1704724800\n  },\n  \"message\": \"Rimborso completato\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "POST /admin/refund/:paymentId (Parziale)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"amountCents\": 499\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/admin/refund/{{paymentId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "refund", "{{paymentId}}"]
+        },
+        "description": "Rimborso PARZIALE di un pagamento esistente.\n\nParametri Body:\n- amountCents (number): Importo in centesimi (es: 499 = €4.99)\n\nSupporta automaticamente:\n- Stripe (charge, payment_intent, invoice)\n- PayPal (capture_id)\n\nRichiede:\n- adminToken: Token Firebase ID utente admin\n- paymentId: ID documento Firestore del pagamento"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amountCents\": 499\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/refund/pay_abc123",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "refund", "pay_abc123"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"success\": true,\n  \"refund\": {\n    \"id\": \"re_1PQzEL2eZvKYlo2C0D5C9mVj\",\n    \"amount\": 499,\n    \"status\": \"succeeded\",\n    \"created\": 1704724800\n  },\n  \"message\": \"Rimborso parziale completato (€4.99)\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "POST /admin/refund - Stripe Invoice Example",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"amountCents\": 999\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/admin/refund/in_1PQzEL2eZvKYlo2C8KKfQjXt",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "refund", "in_1PQzEL2eZvKYlo2C8KKfQjXt"]
+        },
+        "description": "Esempio di rimborso su una Stripe Invoice.\n\nNOTA: Sostituisci 'in_1PQzEL2eZvKYlo2C8KKfQjXt' con un ID invoice reale dal tuo Firestore.\n\nFormato Stripe Invoice ID: in_XXXXXXXXXXXXXXXXXX"
+      },
+      "response": []
+    },
+    {
+      "name": "POST /admin/refund - PayPal Capture Example",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"amountCents\": 999\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/admin/refund/8LW12345X6789012K",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "refund", "8LW12345X6789012K"]
+        },
+        "description": "Esempio di rimborso su un PayPal Capture.\n\nNOTA: Sostituisci '8LW12345X6789012K' con un ID capture reale dal tuo Firestore.\n\nFormato PayPal Capture ID: 17 caratteri alfanumerici"
+      },
+      "response": []
+    }
+  ],
+  "event": [],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://api.mypetcare.app",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "YOUR_FIREBASE_ADMIN_ID_TOKEN_HERE",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "PAYMENT_DOC_ID_FROM_FIRESTORE",
+      "type": "string"
+    }
+  ]
+}

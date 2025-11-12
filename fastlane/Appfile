@@ -1,0 +1,14 @@
+# MyPetCare Fastlane App Configuration
+
+# Android Configuration
+json_key_file("play-account.json") # Path to Play Console Service Account JSON
+package_name("it.mypetcare.my_pet_care") # Android package name
+
+# iOS Configuration
+app_identifier("it.mypetcare.MyPetCare") # iOS Bundle ID
+apple_id("your-apple-id@example.com") # Apple Developer Account Email
+itc_team_id("123456789") # App Store Connect Team ID
+team_id("ABCD123456") # Developer Portal Team ID
+
+# For CI/CD, these can be overridden with environment variables:
+# FASTLANE_USER, FASTLANE_PASSWORD, FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD

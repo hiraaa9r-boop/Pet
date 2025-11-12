@@ -1,81 +1,51 @@
-/**
- * Rate Limiting Middleware
- * Protects API endpoints from abuse with tiered rate limits
- */
-
-import rateLimit from 'express-rate-limit';
+import rateLimit from 'express-rate-limit'
 
 /**
- * General API rate limiter
- * 300 requests per 15 minutes per IP
+ * Rate limiter generico per API pubbliche (100 req/15min)
  */
 export const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300,
+  windowMs: 15 * 60 * 1000, // 15 minuti
+  max: 100,
+  message: { ok: false, message: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    ok: false,
-    message: 'Too many requests from this IP, please try again later.',
-  },
-});
+})
 
 /**
- * Authentication endpoints rate limiter
- * 50 requests per 15 minutes (login/signup)
+ * Rate limiter per endpoint di autenticazione (5 req/15min)
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 50,
+  max: 5,
+  message: { ok: false, message: 'Too many authentication attempts, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    ok: false,
-    message: 'Too many authentication attempts, please try again later.',
-  },
-});
+})
 
 /**
- * Write operations rate limiter
- * 120 requests per 10 minutes (POST/PUT/DELETE)
+ * Rate limiter per endpoint GDPR (10 req/ora)
+ * GDPR richiede protezione contro abusi ma garantire accesso ragionevole
  */
-export const writeLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 120,
+export const gdprLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 ora
+  max: 10,
+  message: { ok: false, message: 'Too many GDPR requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    ok: false,
-    message: 'Too many write requests, please slow down.',
-  },
-});
+})
 
 /**
- * Payment endpoints rate limiter (stricter)
- * 40 requests per 10 minutes
+ * Rate limiter per Stripe webhooks (1000 req/ora)
+ * Stripe può inviare molti webhook in caso di batch operations
  */
-export const paymentsLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 40,
+export const webhookLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 1000,
+  message: { ok: false, message: 'Too many webhook requests.' },
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    ok: false,
-    message: 'Too many payment requests, please try again later.',
+  skip: (req) => {
+    // Skip rate limit per webhook Stripe verificati
+    return req.headers['stripe-signature'] !== undefined
   },
-});
-
-/**
- * Admin endpoints rate limiter
- * 200 requests per 15 minutes
- */
-export const adminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    ok: false,
-    message: 'Too many admin requests, please slow down.',
-  },
-});
+})

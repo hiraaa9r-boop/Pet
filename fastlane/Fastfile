@@ -1,0 +1,117 @@
+# MyPetCare Fastlane Configuration
+# Automated deployment to Play Console and App Store
+
+default_platform(:ios)
+
+# ==========================================
+# iOS Platform
+# ==========================================
+platform :ios do
+  desc "📱 Upload to TestFlight (Beta Testing)"
+  lane :beta do
+    # Build the app
+    build_app(
+      scheme: "Runner",
+      export_method: "app-store",
+      output_directory: "./build/ios/ipa",
+      output_name: "MyPetCare.ipa"
+    )
+    
+    # Upload to TestFlight
+    upload_to_testflight(
+      skip_submission: false,
+      skip_waiting_for_build_processing: false,
+      distribute_external: true,
+      notify_external_testers: true,
+      changelog: "New beta build with latest features and bug fixes"
+    )
+  end
+
+  desc "🚀 Release to App Store (Production)"
+  lane :release do
+    # Upload to App Store Connect
+    upload_to_app_store(
+      submit_for_review: true,
+      automatic_release: true,
+      force: true,
+      skip_metadata: false,
+      skip_screenshots: false,
+      precheck_include_in_app_purchases: false
+    )
+  end
+
+  desc "📸 Generate Screenshots"
+  lane :screenshots do
+    capture_screenshots
+    upload_to_app_store(skip_binary_upload: true, skip_metadata: true)
+  end
+end
+
+# ==========================================
+# Android Platform
+# ==========================================
+platform :android do
+  desc "🤖 Upload to Play Console (Internal Track)"
+  lane :beta do
+    upload_to_play_store(
+      track: "internal",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "🎯 Staged Rollout (10% → 50% → 100%)"
+  lane :rollout_10 do
+    upload_to_play_store(
+      track: "production",
+      rollout: "0.1",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  lane :rollout_50 do
+    upload_to_play_store(
+      track: "production",
+      rollout: "0.5",
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  lane :rollout_100 do
+    upload_to_play_store(
+      track: "production",
+      rollout: "1.0",
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "📦 Upload Full Release to Production"
+  lane :release do
+    upload_to_play_store(
+      track: "production",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: false,
+      skip_upload_images: false,
+      skip_upload_screenshots: false
+    )
+  end
+end
+
+# ==========================================
+# Error Handling
+# ==========================================
+error do |lane, exception|
+  puts "❌ Error in lane #{lane}: #{exception.message}"
+  # Send notification to Slack/Discord if configured
+end

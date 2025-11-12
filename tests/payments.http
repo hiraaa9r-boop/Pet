@@ -1,0 +1,103 @@
+###
+# MyPetCare Payments API Tests
+# VS Code REST Client Extension Required
+# https://marketplace.visualstudio.com/items?itemName=humao.rest-client
+###
+
+@baseUrl = https://api.mypetcare.app
+# Inserisci qui un ID Token Firebase di un utente autenticato:
+@token = {{$processEnv FIREBASE_USER_ID_TOKEN}}
+
+###
+# 1) Health Check
+GET {{baseUrl}}/health
+Accept: application/json
+
+###
+# 2) Create Stripe Checkout Session - Subscription
+POST {{baseUrl}}/payments/stripe/create-session
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "planId": "price_ABC123",
+  "coupon": "FREE-1M"
+}
+
+###
+# 3) Create Stripe Checkout Session - No Coupon
+POST {{baseUrl}}/payments/stripe/create-session
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "planId": "price_DEF456"
+}
+
+###
+# 4) Create Stripe Billing Portal Session
+POST {{baseUrl}}/payments/stripe/portal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customerId": "cus_STRIPE_CUSTOMER_ID"
+}
+
+###
+# 5) Create PayPal Order - One-time Payment
+POST {{baseUrl}}/payments/paypal/create-order
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "amount": "9.99",
+  "currency": "EUR",
+  "description": "MyPetCare PRO - Mensile"
+}
+
+###
+# 6) Create PayPal Order - Annual
+POST {{baseUrl}}/payments/paypal/create-order
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "amount": "99.00",
+  "currency": "EUR",
+  "description": "MyPetCare PRO - Annuale"
+}
+
+###
+# 7) Capture PayPal Order
+# Sostituisci :orderId con l'ID restituito da create-order
+POST {{baseUrl}}/payments/paypal/capture/PAYPAL_ORDER_ID
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+###
+# 8) Validate Coupon - Valid Code
+POST {{baseUrl}}/payments/coupon/validate
+Content-Type: application/json
+
+{
+  "code": "FREE-1M"
+}
+
+###
+# 9) Validate Coupon - Invalid Code
+POST {{baseUrl}}/payments/coupon/validate
+Content-Type: application/json
+
+{
+  "code": "INVALID-CODE"
+}
+
+###
+# 10) Validate Coupon - Empty Code (Error Test)
+POST {{baseUrl}}/payments/coupon/validate
+Content-Type: application/json
+
+{
+  "code": ""
+}

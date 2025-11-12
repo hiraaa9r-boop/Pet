@@ -10,7 +10,6 @@ import express, { Request, Response } from 'express';
 import helmet from 'helmet';
 import xss from 'xss-clean';
 
-import { handlePaypalWebhook } from './functions/paypalWebhook';
 import { corsAllowlist } from './middleware/corsAllowlist';
 import {
   errorHandler,
@@ -22,19 +21,20 @@ import {
   adminLimiter,
 } from './middleware/rateLimit';
 import { trimStrings } from './middleware/validateRequest';
+import { handlePaypalWebhook } from './functions/paypalWebhook';
+import { handleStripeWebhook } from './webhooks/stripeWebhook';
 
 // Routers
 import adminRouter from './routes/admin';
 import authRouter from './routes/auth.routes';
 import bookingsRouter from './routes/booking.routes';
+import gdprRouter from './routes/gdpr';
 import jobsRouter from './routes/jobs';
 import messagesRouter from './routes/messages';
 import paymentsRouter from './routes/payments.routes';
+import prosRouter from './routes/pros';
 import reviewsRouter from './routes/reviews.routes';
 import suggestionsRouter from './routes/suggestions.routes';
-
-// Webhooks
-import { handleStripeWebhook } from './webhooks/stripeWebhook';
 
 // ==========================================
 // Express App Configuration
@@ -128,6 +128,12 @@ app.use('/api/payments', paymentsRouter);
 
 // Suggestions routes
 app.use('/api/suggestions', suggestionsRouter);
+
+// GDPR routes (data export & deletion)
+app.use('/api', gdprRouter);
+
+// PRO routes (with cache & geosearch)
+app.use('/api/pros', prosRouter);
 
 // Admin routes (with admin rate limiter)
 app.use('/admin', adminLimiter, adminRouter);
