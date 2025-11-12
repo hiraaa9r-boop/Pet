@@ -1,0 +1,84 @@
+name: Deploy Backend (Cloud Run)
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+
+concurrency:
+  group: deploy-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      REGION: ${{ secrets.GCP_REGION }}
+      # Environment mapping based on branch
+      PROJECT_ID: ${{ github.ref == 'refs/heads/main' && secrets.GCP_PROJECT_ID_PROD || secrets.GCP_PROJECT_ID_STAGING }}
+      SERVICE_NAME: ${{ github.ref == 'refs/heads/main' && secrets.CLOUD_RUN_SERVICE_PROD || secrets.CLOUD_RUN_SERVICE_STAGING }}
+
+      # Application environment variables
+      CORS_ORIGINS: ${{ github.ref == 'refs/heads/main' && secrets.CORS_ORIGINS_PROD || secrets.CORS_ORIGINS_STAGING }}
+      STRIPE_SECRET_KEY: ${{ github.ref == 'refs/heads/main' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_STAGING }}
+      STRIPE_WEBHOOK_SECRET: ${{ github.ref == 'refs/heads/main' && secrets.STRIPE_WEBHOOK_SECRET_PROD || secrets.STRIPE_WEBHOOK_SECRET_STAGING }}
+      NODE_ENV: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Build (if applicable)
+        working-directory: backend
+        run: npm run build --if-present
+
+      - name: Setup gcloud authentication
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ github.ref == 'refs/heads/main' && secrets.GCP_SA_KEY_PROD || secrets.GCP_SA_KEY_STAGING }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy to Cloud Run (source-based)
+        working-directory: backend
+        run: |
+          gcloud run deploy "$SERVICE_NAME" \
+            --region="$REGION" \
+            --source . \
+            --platform=managed \
+            --allow-unauthenticated \
+            --memory=512Mi \
+            --timeout=30s \
+            --ingress=all \
+            --set-env-vars="CORS_ORIGINS=${CORS_ORIGINS},NODE_ENV=${NODE_ENV}" \
+            --set-env-vars="STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY},STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}"
+
+      - name: Deployment summary
+        run: |
+          echo "✅ Deployment completed successfully"
+          echo "Environment: ${{ github.ref == 'refs/heads/main' && 'PRODUCTION' || 'STAGING' }}"
+          echo "Service: $SERVICE_NAME"
+          echo "Region: $REGION"

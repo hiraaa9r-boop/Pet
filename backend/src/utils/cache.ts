@@ -8,6 +8,32 @@ type Entry<T = any> = { value: T; etag: string; expiresAt: number }
 const store = new Map<string, Entry>()
 
 /**
+ * Cache metrics for monitoring
+ */
+let hits = 0
+let misses = 0
+
+/**
+ * Get cache statistics
+ */
+export function getStats() {
+  return {
+    hits,
+    misses,
+    entries: store.size,
+    hitRate: hits + misses > 0 ? ((hits / (hits + misses)) * 100).toFixed(2) + '%' : '0%',
+  }
+}
+
+/**
+ * Reset cache statistics (for testing)
+ */
+export function resetStats() {
+  hits = 0
+  misses = 0
+}
+
+/**
  * Genera weak ETag da payload (SHA-1 hash)
  */
 export function makeEtag(payload: any): string {
@@ -20,11 +46,16 @@ export function makeEtag(payload: any): string {
  */
 export function getCache<T = any>(key: string): Entry<T> | null {
   const e = store.get(key)
-  if (!e) return null
-  if (Date.now() > e.expiresAt) {
-    store.delete(key)
+  if (!e) {
+    misses++
     return null
   }
+  if (Date.now() > e.expiresAt) {
+    store.delete(key)
+    misses++
+    return null
+  }
+  hits++
   return e as Entry<T>
 }
 

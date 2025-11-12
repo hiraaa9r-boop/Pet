@@ -29,6 +29,7 @@ import adminRouter from './routes/admin';
 import authRouter from './routes/auth.routes';
 import bookingsRouter from './routes/booking.routes';
 import gdprRouter from './routes/gdpr';
+import internalRouter from './routes/internal';
 import jobsRouter from './routes/jobs';
 import messagesRouter from './routes/messages';
 import paymentsRouter from './routes/payments.routes';
@@ -143,6 +144,9 @@ app.use('/jobs', jobsRouter);
 
 // Messages/Chat routes
 app.use('/messages', messagesRouter);
+
+// Internal routes (cache management & monitoring)
+app.use('/api', internalRouter);
 
 // ==========================================
 // Error Handling
