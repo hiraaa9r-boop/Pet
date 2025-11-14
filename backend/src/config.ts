@@ -1,16 +1,39 @@
-// src/config.ts
+// backend/src/config.ts
+type Env = "development" | "production" | "test";
+
+const nodeEnv = (process.env.NODE_ENV as Env) || "development";
+
+function requireEnv(name: string, optional = false): string {
+  const value = process.env[name];
+  if (!value && !optional) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value || "";
+}
+
 export const config = {
-  port: process.env.PORT || 8080,
-  env: process.env.NODE_ENV || 'development',
+  env: nodeEnv,
 
-  stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
-  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+  backendBaseUrl: requireEnv("BACKEND_BASE_URL"),
+  webBaseUrl: requireEnv("WEB_BASE_URL"),
 
-  paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
-  paypalSecret: process.env.PAYPAL_SECRET || '',
-  paypalApi: process.env.PAYPAL_API || 'https://api-m.sandbox.paypal.com',
-  paypalWebhookId: process.env.PAYPAL_WEBHOOK_ID || '',
+  // Stripe
+  stripeSecretKey: requireEnv("STRIPE_SECRET_KEY"),
+  stripeWebhookSecret: requireEnv("STRIPE_WEBHOOK_SECRET"),
 
-  backendBaseUrl: process.env.BACKEND_BASE_URL || 'http://localhost:8080',
-  webBaseUrl: process.env.WEB_BASE_URL || 'http://localhost:52000'
+  // PayPal
+  paypalClientId: requireEnv("PAYPAL_CLIENT_ID"),
+  paypalSecret: requireEnv("PAYPAL_SECRET"),
+  paypalWebhookId: requireEnv("PAYPAL_WEBHOOK_ID"),
+  paypalApiBaseUrl: requireEnv("PAYPAL_API", true) || "https://api-m.paypal.com",
+
+  // Firestore collections (centralizzate, così se cambi un nome lo fai qui)
+  collections: {
+    pros: "pros",
+    bookings: "bookings",
+    calendars: "calendars",
+    notifications: "notifications",
+    coupons: "coupons",
+    users: "users",
+  },
 };
