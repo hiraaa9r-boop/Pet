@@ -1,153 +1,95 @@
-import { Router } from 'express'
+// backend/src/routes/pros.ts
+// Route gestione profili PRO
 
-import { createProSchema, updateProSchema } from '../schemas/pro'
-import { getCache, setCache, invalidatePrefix } from '../utils/cache'
-import { getDb } from '../utils/firebaseAdmin'
-import { geoRadiusQuery, withGeohash, type LatLng } from '../utils/geo'
+import { Router } from 'express';
+import { db } from '../firebase';
+import { requireAuth, AuthRequest } from '../middleware/auth';
 
-const db = getDb()
+const router = Router();
 
-const router = Router()
-const CACHE_TTL = 60 // 60 secondi
+/**
+ * POST /api/pros/me
+ * Crea/Aggiorna profilo PRO del current user (proId = uid)
+ * Richiede autenticazione
+ */
+router.post('/me', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const uid = req.user!.uid;
+    const {
+      displayName,
+      city,
+      services,
+      categories,
+      description,
+      phone
+    } = req.body;
+
+    await db
+      .collection('pros')
+      .doc(uid)
+      .set(
+        {
+          uid,
+          displayName,
+          city,
+          services,
+          categories,
+          description,
+          phone,
+          status: 'pending',
+          subscriptionStatus: 'inactive',
+          updatedAt: new Date()
+        },
+        { merge: true }
+      );
+
+    console.log(`✅ PRO profile created/updated for user: ${uid}`);
+
+    return res.json({ ok: true, proId: uid });
+  } catch (err: any) {
+    console.error('❌ Create/update PRO error:', err.message);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
 /**
  * GET /api/pros
- * Lista professionisti con cache ETag (60s TTL) e geosearch opzionale
- * Query params:
- * - lat, lng, radius: geosearch entro raggio (km)
- * - category: filtro per categoria
- * Headers: If-None-Match per validazione ETag
+ * Lista PRO visibili nella mappa (solo approved + abbonati attivi)
  */
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
-    const { lat, lng, radius, category } = req.query
+    const snap = await db
+      .collection('pros')
+      .where('status', '==', 'approved')
+      .where('subscriptionStatus', '==', 'active')
+      .get();
 
-    // Genera cache key unica per parametri
-    const cacheKey = `pros:${lat || 'all'}:${lng || 'all'}:${radius || 'all'}:${category || 'all'}`
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    // Controlla cache + ETag
-    const cached = getCache(cacheKey)
-    if (cached) {
-      const clientETag = req.headers['if-none-match']
-      if (clientETag === cached.etag) {
-        return res.status(304).end() // Not Modified
-      }
-      // Cache hit, ETag diverso → ritorna dati
-      res.setHeader('ETag', cached.etag)
-      res.setHeader('Cache-Control', 'private, max-age=60')
-      res.setHeader('Vary', 'If-None-Match')
-      return res.json({ ok: true, data: cached.value })
+    return res.json(items);
+  } catch (err: any) {
+    console.error('❌ List PROs error:', err.message);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+/**
+ * GET /api/pros/:id
+ * Dettaglio singolo PRO
+ */
+router.get('/:id', async (req, res) => {
+  try {
+    const snap = await db.collection('pros').doc(req.params.id).get();
+
+    if (!snap.exists) {
+      return res.status(404).json({ error: 'PRO not found' });
     }
 
-    // Cache miss → query Firestore
-    let pros: any[] = []
-
-    if (lat && lng && radius) {
-      // Geosearch con raggio
-      const center: LatLng = { lat: parseFloat(lat as string), lng: parseFloat(lng as string) }
-      const radiusKm = parseFloat(radius as string)
-
-      const prosRef = db.collection('pros')
-      const extraWhere = category
-        ? (q: FirebaseFirestore.Query) =>
-            q.where('visible', '==', true).where('categories', 'array-contains', category)
-        : (q: FirebaseFirestore.Query) => q.where('visible', '==', true)
-
-      pros = await geoRadiusQuery(prosRef, center, radiusKm, extraWhere, 50)
-    } else {
-      // Query normale (no geo)
-      let query: FirebaseFirestore.Query = db.collection('pros').where('visible', '==', true)
-      if (category) query = query.where('categories', 'array-contains', category)
-
-      const snap = await query.limit(50).get()
-      pros = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    }
-
-    // Salva in cache con ETag
-    const entry = setCache(cacheKey, pros, CACHE_TTL)
-    res.setHeader('ETag', entry.etag)
-    res.setHeader('Cache-Control', 'private, max-age=60')
-    res.setHeader('Vary', 'If-None-Match')
-
-    res.json({ ok: true, data: pros })
+    return res.json({ id: snap.id, ...snap.data() });
   } catch (err: any) {
-    res.status(500).json({ ok: false, message: err.message })
+    console.error('❌ Get PRO error:', err.message);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
-})
+});
 
-/**
- * POST /api/pros
- * Crea nuovo PRO (con geohash automatico se geo presente)
- * Invalida cache pros:*
- */
-router.post('/', async (req, res) => {
-  try {
-    const parsed = createProSchema.parse(req.body)
-
-    // Aggiungi geohash se presente geo
-    const data = parsed.geo ? withGeohash(parsed as any) : parsed
-
-    const ref = await db.collection('pros').add({
-      ...data,
-      visible: true,
-      createdAt: new Date().toISOString(),
-    })
-
-    // Invalida tutte le cache pros:*
-    const invalidated = invalidatePrefix('pros:')
-    console.log(`[CACHE] Invalidated ${invalidated} pros:* keys`)
-
-    res.status(201).json({ ok: true, id: ref.id })
-  } catch (err: any) {
-    res.status(400).json({ ok: false, message: err.message })
-  }
-})
-
-/**
- * PUT /api/pros/:id
- * Aggiorna PRO (ricalcola geohash se geo cambia)
- * Invalida cache pros:*
- */
-router.put('/:id', async (req, res) => {
-  try {
-    const parsed = updateProSchema.parse(req.body)
-    const data = parsed.geo ? withGeohash(parsed as any) : parsed
-
-    await db.collection('pros').doc(req.params.id).update({
-      ...data,
-      updatedAt: new Date().toISOString(),
-    })
-
-    // Invalida cache
-    const invalidated = invalidatePrefix('pros:')
-    console.log(`[CACHE] Invalidated ${invalidated} pros:* keys`)
-
-    res.json({ ok: true })
-  } catch (err: any) {
-    res.status(400).json({ ok: false, message: err.message })
-  }
-})
-
-/**
- * DELETE /api/pros/:id
- * Soft-delete PRO (visible = false)
- * Invalida cache pros:*
- */
-router.delete('/:id', async (req, res) => {
-  try {
-    await db.collection('pros').doc(req.params.id).update({
-      visible: false,
-      deletedAt: new Date().toISOString(),
-    })
-
-    // Invalida cache
-    const invalidated = invalidatePrefix('pros:')
-    console.log(`[CACHE] Invalidated ${invalidated} pros:* keys`)
-
-    res.json({ ok: true })
-  } catch (err: any) {
-    res.status(500).json({ ok: false, message: err.message })
-  }
-})
-
-export default router
+export default router;

@@ -1,309 +1,190 @@
-/**
- * Payments Routes - Stripe + PayPal
- * Gestisce checkout, webhook e ordini PayPal
- */
+// backend/src/routes/payments.ts
+// Route pagamenti: Stripe checkout + PayPal create-order
 
-import express, { Router } from 'express';
+import { Router } from 'express';
 import Stripe from 'stripe';
 import fetch from 'node-fetch';
 import { db } from '../firebase';
+import { config } from '../config';
 
 const router = Router();
 
 // Inizializza Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: '2024-06-20',
+const stripe = new Stripe(config.stripeSecretKey, {
+  apiVersion: '2024-06-20'
 });
-
-// ========================================================================
-// STRIPE CHECKOUT (ABBONAMENTO PRO)
-// ========================================================================
 
 /**
  * POST /api/payments/stripe/checkout
- * Crea una Stripe Checkout Session per abbonamento PRO
+ * Crea una sessione di checkout Stripe per abbonamento PRO
  * 
  * Body:
- * - proId: string (ID professionista)
- * - priceId: string (Stripe Price ID)
- * - successUrl: string (URL ritorno successo)
- * - cancelUrl: string (URL ritorno annullamento)
+ * - proId: string (ID del professionista)
+ * - priceId: string (ID del piano Stripe, es. price_1234567890)
+ * - successUrl?: string (default: webBaseUrl/subscribe/success?session_id={CHECKOUT_SESSION_ID})
+ * - cancelUrl?: string (default: webBaseUrl/subscribe/cancel)
+ * 
+ * Response:
+ * - url: string (URL della pagina di checkout Stripe)
  */
 router.post('/stripe/checkout', async (req, res) => {
   try {
     const { proId, priceId, successUrl, cancelUrl } = req.body;
 
-    if (!proId || !priceId || !successUrl || !cancelUrl) {
-      return res.status(400).json({ error: 'Missing required parameters' });
+    // Validazione input
+    if (!proId || !priceId) {
+      return res.status(400).json({ error: 'Missing required params: proId, priceId' });
     }
 
     // Verifica esistenza PRO
-    const proRef = db.collection('pros').doc(proId);
-    const proSnap = await proRef.get();
-    
+    const proSnap = await db.collection('pros').doc(proId).get();
     if (!proSnap.exists) {
       return res.status(404).json({ error: 'PRO not found' });
     }
 
-    const proData = proSnap.data() || {};
-    const stripeCustomerId = proData.stripeCustomerId as string | undefined;
+    const pro = proSnap.data() || {};
+    const stripeCustomerId = pro.stripeCustomerId as string | undefined;
 
-    // Crea Checkout Session
+    // Crea sessione checkout Stripe
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: stripeCustomerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: cancelUrl,
-      metadata: { proId },
+      success_url:
+        successUrl ||
+        `${config.webBaseUrl}/subscribe/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: cancelUrl || `${config.webBaseUrl}/subscribe/cancel`,
+      metadata: { proId }
     });
 
+    console.log(`✅ Stripe checkout session created: ${session.id} for PRO: ${proId}`);
+
     return res.json({ url: session.url });
-    
-  } catch (error) {
-    console.error('Stripe checkout error:', error);
+  } catch (err: any) {
+    console.error('❌ Stripe checkout error:', err.message);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-// ========================================================================
-// STRIPE WEBHOOK
-// ========================================================================
-
 /**
- * POST /api/payments/stripe/webhook
- * Gestisce eventi webhook da Stripe
- * 
- * IMPORTANTE: Questa route DEVE usare express.raw({ type: 'application/json' })
- * NON usare express.json() per questa route!
+ * Funzione helper: Ottiene access token PayPal via OAuth2
+ * Cache il token per evitare richieste ripetute
  */
-router.post(
-  '/stripe/webhook',
-  express.raw({ type: 'application/json' }),
-  async (req, res) => {
-    const sig = req.headers['stripe-signature'] as string;
+let cachedPayPalToken: { accessToken: string; expiresAt: number } | null = null;
 
-    let event: Stripe.Event;
-    
-    try {
-      // Verifica firma webhook
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET as string
-      );
-    } catch (err: any) {
-      console.error('Stripe webhook signature error:', err.message);
-      return res.status(400).send('Webhook Error: Invalid signature');
-    }
-
-    console.log('Stripe webhook event received:', event.type);
-
-    try {
-      // Gestione eventi subscription
-      if (
-        event.type === 'customer.subscription.created' ||
-        event.type === 'customer.subscription.updated' ||
-        event.type === 'customer.subscription.deleted'
-      ) {
-        const sub = event.data.object as Stripe.Subscription;
-
-        // Estrai proId dai metadata
-        const metadata = sub.metadata as any;
-        const itemPrice = sub.items.data[0]?.price;
-        const proIdFromMetadata = metadata?.proId;
-        const proIdFromPrice = (itemPrice?.metadata as any)?.proId;
-        const proId = proIdFromMetadata || proIdFromPrice;
-
-        if (!proId) {
-          console.warn('No proId in subscription metadata, skipping update');
-        } else {
-          const status = sub.status; // trialing, active, past_due, canceled, etc.
-
-          // Determina subscriptionStatus
-          let subscriptionStatus: 'active' | 'inactive' | 'trial' | 'past_due';
-          
-          if (status === 'active') {
-            subscriptionStatus = 'active';
-          } else if (status === 'trialing') {
-            subscriptionStatus = 'trial';
-          } else if (status === 'past_due') {
-            subscriptionStatus = 'past_due';
-          } else {
-            subscriptionStatus = 'inactive';
-          }
-
-          // Aggiorna Firestore
-          await db.collection('pros').doc(proId).update({
-            subscriptionStatus,
-            subscriptionProvider: 'stripe',
-            subscriptionPlan: itemPrice?.nickname || itemPrice?.id || null,
-            stripeSubscriptionId: sub.id,
-            currentPeriodStart: new Date(sub.current_period_start * 1000),
-            currentPeriodEnd: new Date(sub.current_period_end * 1000),
-            lastPaymentAt: sub.latest_invoice != null 
-              ? new Date(sub.current_period_start * 1000) 
-              : null,
-            cancelAtPeriodEnd: sub.cancel_at_period_end,
-            updatedAt: new Date(),
-          });
-
-          console.log(`Updated PRO ${proId} subscription to ${subscriptionStatus}`);
-        }
-      }
-
-      // Gestione pagamenti riusciti
-      if (event.type === 'invoice.payment_succeeded') {
-        const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = invoice.subscription as string;
-        
-        if (subscriptionId) {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const proId = subscription.metadata.proId;
-          
-          if (proId) {
-            await db.collection('pros').doc(proId).update({
-              lastPaymentAt: new Date(),
-              lastPaymentAmount: invoice.amount_paid / 100,
-              lastPaymentCurrency: invoice.currency,
-              updatedAt: new Date(),
-            });
-            
-            console.log(`Payment succeeded for PRO ${proId}`);
-          }
-        }
-      }
-
-      // Gestione pagamenti falliti
-      if (event.type === 'invoice.payment_failed') {
-        const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = invoice.subscription as string;
-        
-        if (subscriptionId) {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const proId = subscription.metadata.proId;
-          
-          if (proId) {
-            await db.collection('pros').doc(proId).update({
-              subscriptionStatus: 'past_due',
-              updatedAt: new Date(),
-            });
-            
-            console.log(`Payment failed for PRO ${proId}`);
-          }
-        }
-      }
-
-      res.json({ received: true });
-      
-    } catch (error) {
-      console.error('Stripe webhook handling error:', error);
-      res.status(500).send('Webhook handler error');
-    }
-  }
-);
-
-// ========================================================================
-// PAYPAL UTILITIES
-// ========================================================================
-
-/**
- * Ottiene access token PayPal per API calls
- */
 async function getPayPalAccessToken(): Promise<string> {
+  // Riusa token se ancora valido
+  if (
+    cachedPayPalToken &&
+    Date.now() < cachedPayPalToken.expiresAt - 60000 // 1 minuto di margine
+  ) {
+    return cachedPayPalToken.accessToken;
+  }
+
+  // Richiedi nuovo token
   const auth = Buffer.from(
-    `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_SECRET}`
+    `${config.paypalClientId}:${config.paypalSecret}`
   ).toString('base64');
 
-  const response = await fetch(
-    `${process.env.PAYPAL_API}/v1/oauth2/token`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'grant_type=client_credentials',
-    }
-  );
+  const resp = await fetch(`${config.paypalApi}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: 'grant_type=client_credentials'
+  });
 
-  const data = (await response.json()) as any;
-  
-  if (!response.ok) {
-    console.error('PayPal token error:', data);
-    throw new Error('PayPal token error');
+  const data = (await resp.json()) as any;
+
+  if (!resp.ok) {
+    console.error('❌ PayPal token error:', data);
+    throw new Error('PayPal authentication failed');
   }
 
-  return data.access_token as string;
-}
+  // Cache token
+  cachedPayPalToken = {
+    accessToken: data.access_token as string,
+    expiresAt: Date.now() + (data.expires_in as number) * 1000
+  };
 
-// ========================================================================
-// PAYPAL CREATE ORDER
-// ========================================================================
+  return cachedPayPalToken.accessToken;
+}
 
 /**
  * POST /api/payments/paypal/create-order
- * Crea ordine PayPal per abbonamento mensile
+ * Crea un ordine PayPal per pagamento una tantum
  * 
  * Body:
- * - proId: string
- * - amount: string (es. "9.99")
- * - returnUrl: string
- * - cancelUrl: string
+ * - proId: string (ID del professionista)
+ * - amount: string (importo in EUR, es. "9.99")
+ * - returnUrl?: string (default: webBaseUrl/subscribe/success)
+ * - cancelUrl?: string (default: webBaseUrl/subscribe/cancel)
+ * 
+ * Response:
+ * - approvalLink: string (URL per approvazione ordine PayPal)
  */
 router.post('/paypal/create-order', async (req, res) => {
   try {
     const { proId, amount, returnUrl, cancelUrl } = req.body;
-    
-    if (!proId || !amount || !returnUrl || !cancelUrl) {
-      return res.status(400).json({ error: 'Missing required parameters' });
+
+    // Validazione input
+    if (!proId || !amount) {
+      return res.status(400).json({ error: 'Missing required params: proId, amount' });
     }
 
+    // Ottieni access token
     const token = await getPayPalAccessToken();
 
-    const response = await fetch(
-      `${process.env.PAYPAL_API}/v2/checkout/orders`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          intent: 'CAPTURE',
-          purchase_units: [
-            {
-              reference_id: proId,
-              amount: {
-                currency_code: 'EUR',
-                value: amount,
-              },
+    // Crea ordine PayPal
+    const resp = await fetch(`${config.paypalApi}/v2/checkout/orders`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        intent: 'CAPTURE',
+        purchase_units: [
+          {
+            reference_id: proId,
+            custom_id: proId,
+            amount: {
+              currency_code: 'EUR',
+              value: amount
             },
-          ],
-          application_context: {
-            return_url: returnUrl,
-            cancel_url: cancelUrl,
-          },
-        }),
-      }
-    );
+            description: 'MyPetCare PRO Subscription'
+          }
+        ],
+        application_context: {
+          return_url: returnUrl || `${config.webBaseUrl}/subscribe/success`,
+          cancel_url: cancelUrl || `${config.webBaseUrl}/subscribe/cancel`,
+          brand_name: 'MyPetCare',
+          user_action: 'PAY_NOW'
+        }
+      })
+    });
 
-    const data = (await response.json()) as any;
-    
-    if (!response.ok) {
-      console.error('PayPal create order error:', data);
-      return res.status(500).json({ error: 'PayPal create order error' });
+    const data = (await resp.json()) as any;
+
+    if (!resp.ok) {
+      console.error('❌ PayPal create order error:', data);
+      return res.status(500).json({ error: 'PayPal order creation failed' });
     }
 
-    // Trova link approvazione
-    const approvalLink = data.links?.find(
-      (l: any) => l.rel === 'approve'
-    )?.href;
+    // Estrai link approvazione
+    const approvalLink = data.links?.find((l: any) => l.rel === 'approve')?.href;
+
+    if (!approvalLink) {
+      console.error('❌ PayPal approval link not found in response');
+      return res.status(500).json({ error: 'PayPal approval link missing' });
+    }
+
+    console.log(`✅ PayPal order created: ${data.id} for PRO: ${proId}`);
 
     return res.json({ approvalLink });
-    
-  } catch (error) {
-    console.error('PayPal create-order error:', error);
+  } catch (err: any) {
+    console.error('❌ PayPal create-order error:', err.message);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });

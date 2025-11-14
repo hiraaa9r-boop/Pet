@@ -1,208 +1,164 @@
-/**
- * Stripe Webhook Handler
- * Gestisce eventi webhook da Stripe per aggiornare lo stato degli abbonamenti
- */
+// backend/src/routes/payments.stripe.webhook.ts
+// Webhook handler Stripe per eventi subscription
 
-import { Router } from 'express';
-import { raw } from 'body-parser';
+import { Request, Response } from 'express';
 import Stripe from 'stripe';
 import { db } from '../firebase';
+import { config } from '../config';
 
-const router = Router();
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-06-20',
+const stripe = new Stripe(config.stripeSecretKey, {
+  apiVersion: '2024-06-20'
 });
 
 /**
- * POST /api/payments/stripe/webhook
- * Endpoint webhook per ricevere eventi da Stripe
+ * Handler webhook Stripe
+ * IMPORTANTE: Deve ricevere raw body tramite express.raw()
  * 
- * IMPORTANTE: Questo endpoint deve usare raw body parser!
- * Configurare in index.ts:
- *   app.use('/api/payments/stripe/webhook', raw({ type: 'application/json' }));
+ * Gestisce eventi:
+ * - customer.subscription.created
+ * - customer.subscription.updated
+ * - customer.subscription.deleted
+ * - invoice.payment_succeeded
+ * - invoice.payment_failed
  */
-router.post(
-  '/stripe/webhook',
-  async (req, res) => {
-    const sig = req.headers['stripe-signature'] as string;
-    
-    if (!sig) {
-      console.error('No stripe-signature header');
-      return res.status(400).send('Webhook Error: No signature');
+export async function stripeWebhookHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  const sig = req.headers['stripe-signature'] as string;
+  let event: Stripe.Event;
+
+  // Verifica firma webhook
+  try {
+    event = stripe.webhooks.constructEvent(
+      (req as any).body, // raw body fornito da express.raw
+      sig,
+      config.stripeWebhookSecret
+    );
+  } catch (err: any) {
+    console.error('❌ Stripe webhook signature error:', err.message);
+    res.status(400).send('Webhook signature verification failed');
+    return;
+  }
+
+  console.log(`✅ Stripe webhook received: ${event.type}`);
+
+  try {
+    // Gestione eventi subscription
+    if (
+      event.type === 'customer.subscription.created' ||
+      event.type === 'customer.subscription.updated' ||
+      event.type === 'customer.subscription.deleted'
+    ) {
+      await handleSubscriptionEvent(event);
     }
 
-    let event: Stripe.Event;
-
-    try {
-      // Verifica la firma del webhook
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET || ''
-      );
-    } catch (err: any) {
-      console.error('Webhook signature verification failed:', err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
+    // Gestione eventi invoice (pagamento)
+    if (
+      event.type === 'invoice.payment_succeeded' ||
+      event.type === 'invoice.payment_failed'
+    ) {
+      await handleInvoiceEvent(event);
     }
 
-    console.log('Stripe webhook event received:', event.type);
-
-    try {
-      // Gestisci i vari tipi di eventi
-      switch (event.type) {
-        case 'customer.subscription.created':
-        case 'customer.subscription.updated':
-        case 'customer.subscription.deleted': {
-          await handleSubscriptionChange(event.data.object as Stripe.Subscription);
-          break;
-        }
-
-        case 'invoice.payment_succeeded': {
-          await handlePaymentSucceeded(event.data.object as Stripe.Invoice);
-          break;
-        }
-
-        case 'invoice.payment_failed': {
-          await handlePaymentFailed(event.data.object as Stripe.Invoice);
-          break;
-        }
-
-        case 'customer.subscription.trial_will_end': {
-          await handleTrialWillEnd(event.data.object as Stripe.Subscription);
-          break;
-        }
-
-        default:
-          console.log(`Unhandled event type: ${event.type}`);
-      }
-
-      res.json({ received: true });
-      
-    } catch (err: any) {
-      console.error('Stripe webhook handling error:', err);
-      res.status(500).send('Webhook handler error');
-    }
+    res.json({ received: true });
+  } catch (err: any) {
+    console.error('❌ Stripe webhook handler error:', err.message);
+    res.status(500).send('Webhook handler error');
   }
-);
-
-/**
- * Gestisce cambiamenti nello stato dell'abbonamento
- */
-async function handleSubscriptionChange(subscription: Stripe.Subscription) {
-  const proId = subscription.metadata.proId || subscription.metadata.firebaseUid;
-  
-  if (!proId) {
-    console.error('No proId in subscription metadata');
-    return;
-  }
-
-  const status = subscription.status;
-  const planNickname = subscription.items.data[0]?.plan.nickname || subscription.items.data[0]?.plan.id;
-  
-  // Determina lo stato dell'abbonamento
-  let subscriptionStatus: 'active' | 'inactive' | 'trial' | 'past_due';
-  
-  if (status === 'active') {
-    subscriptionStatus = 'active';
-  } else if (status === 'trialing') {
-    subscriptionStatus = 'trial';
-  } else if (status === 'past_due') {
-    subscriptionStatus = 'past_due';
-  } else {
-    subscriptionStatus = 'inactive';
-  }
-
-  // Aggiorna il documento PRO in Firestore
-  await db.collection('pros').doc(proId).update({
-    subscriptionStatus,
-    subscriptionProvider: 'stripe',
-    subscriptionPlan: planNickname,
-    stripeSubscriptionId: subscription.id,
-    currentPeriodStart: new Date(subscription.current_period_start * 1000),
-    currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-    cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    updatedAt: new Date(),
-  });
-
-  console.log(`Updated PRO ${proId} subscription status to ${subscriptionStatus}`);
 }
 
 /**
- * Gestisce pagamento riuscito
+ * Gestisce eventi subscription Stripe
  */
-async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
-  const subscriptionId = invoice.subscription as string;
-  
-  if (!subscriptionId) {
-    return;
-  }
+async function handleSubscriptionEvent(event: Stripe.Event): Promise<void> {
+  const sub = event.data.object as Stripe.Subscription;
+  const metadata = sub.metadata as any;
+  const price = sub.items.data[0]?.price;
 
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  const proId = subscription.metadata.proId || subscription.metadata.firebaseUid;
-  
+  // Recupera proId da metadata subscription o metadata price
+  const proIdFromMeta = metadata?.proId;
+  const proIdFromPrice = (price?.metadata as any)?.proId;
+  const proId = proIdFromMeta || proIdFromPrice;
+
   if (!proId) {
-    console.error('No proId in subscription metadata');
+    console.warn(`⚠️  Stripe subscription ${sub.id}: no proId in metadata, skipping`);
     return;
   }
 
-  // Aggiorna la data dell'ultimo pagamento
-  await db.collection('pros').doc(proId).update({
-    lastPaymentAt: new Date(),
-    lastPaymentAmount: invoice.amount_paid / 100, // Stripe usa centesimi
-    lastPaymentCurrency: invoice.currency,
-    updatedAt: new Date(),
-  });
+  // Determina status subscription
+  const status = sub.status; // active, trialing, canceled, incomplete, etc.
+  const isActive = status === 'active' || status === 'trialing';
 
-  console.log(`Payment succeeded for PRO ${proId}, amount: ${invoice.amount_paid / 100} ${invoice.currency}`);
-  
-  // TODO: Invia notifica al PRO del pagamento riuscito
+  // Aggiorna Firestore
+  await db
+    .collection('pros')
+    .doc(proId)
+    .update({
+      subscriptionStatus: isActive ? 'active' : 'inactive',
+      subscriptionProvider: 'stripe',
+      subscriptionPlan: price?.nickname || price?.id || null,
+      currentPeriodStart: new Date(sub.current_period_start * 1000),
+      currentPeriodEnd: new Date(sub.current_period_end * 1000),
+      lastPaymentAt:
+        sub.latest_invoice != null
+          ? new Date(sub.current_period_start * 1000)
+          : null,
+      cancelAtPeriodEnd: sub.cancel_at_period_end,
+      stripeCustomerId: sub.customer as string,
+      stripeSubscriptionId: sub.id,
+      updatedAt: new Date()
+    });
+
+  console.log(
+    `✅ PRO ${proId} subscription updated: status=${sub.status}, active=${isActive}`
+  );
 }
 
 /**
- * Gestisce pagamento fallito
+ * Gestisce eventi invoice Stripe (pagamento)
  */
-async function handlePaymentFailed(invoice: Stripe.Invoice) {
-  const subscriptionId = invoice.subscription as string;
-  
-  if (!subscriptionId) {
+async function handleInvoiceEvent(event: Stripe.Event): Promise<void> {
+  const invoice = event.data.object as Stripe.Invoice;
+  const subId = invoice.subscription as string | null;
+
+  if (!subId) {
+    console.warn('⚠️  Stripe invoice without subscription, skipping');
     return;
   }
 
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  const proId = subscription.metadata.proId || subscription.metadata.firebaseUid;
-  
+  // Recupera subscription per ottenere proId
+  const sub = await stripe.subscriptions.retrieve(subId);
+  const proId = (sub.metadata as any)?.proId;
+
   if (!proId) {
-    console.error('No proId in subscription metadata');
+    console.warn(`⚠️  Stripe subscription ${subId}: no proId in metadata, skipping`);
     return;
   }
 
-  // Aggiorna lo stato a past_due se il pagamento è fallito
-  await db.collection('pros').doc(proId).update({
-    subscriptionStatus: 'past_due',
-    updatedAt: new Date(),
-  });
+  // Aggiorna lastPaymentAt se pagamento riuscito
+  if (event.type === 'invoice.payment_succeeded') {
+    await db
+      .collection('pros')
+      .doc(proId)
+      .update({
+        lastPaymentAt: new Date(),
+        updatedAt: new Date()
+      });
 
-  console.log(`Payment failed for PRO ${proId}`);
-  
-  // TODO: Invia notifica al PRO del pagamento fallito
-}
-
-/**
- * Gestisce fine trial imminente
- */
-async function handleTrialWillEnd(subscription: Stripe.Subscription) {
-  const proId = subscription.metadata.proId || subscription.metadata.firebaseUid;
-  
-  if (!proId) {
-    console.error('No proId in subscription metadata');
-    return;
+    console.log(`✅ PRO ${proId} payment succeeded for invoice ${invoice.id}`);
   }
 
-  const trialEnd = new Date(subscription.trial_end! * 1000);
-  console.log(`Trial will end for PRO ${proId} on ${trialEnd.toISOString()}`);
-  
-  // TODO: Invia notifica al PRO che il trial sta per finire (3 giorni prima)
-}
+  // Gestisci pagamento fallito
+  if (event.type === 'invoice.payment_failed') {
+    await db
+      .collection('pros')
+      .doc(proId)
+      .update({
+        subscriptionStatus: 'past_due',
+        updatedAt: new Date()
+      });
 
-export default router;
+    console.log(`⚠️  PRO ${proId} payment failed for invoice ${invoice.id}`);
+  }
+}

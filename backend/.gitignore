@@ -43,3 +43,10 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# TypeScript
+*.tsbuildinfo
+.tscache/
+
+# Debugging
+.pnpm-debug.log

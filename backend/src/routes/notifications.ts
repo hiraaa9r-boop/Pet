@@ -1,7 +1,5 @@
-/**
- * Notifications Routes
- * Gestisce invio notifiche FCM push + in-app Firestore
- */
+// backend/src/routes/notifications.ts
+// Sistema notifiche unificato: FCM push + in-app Firestore
 
 import { Router } from 'express';
 import { db, adminMessaging } from '../firebase';
@@ -9,17 +7,13 @@ import { db, adminMessaging } from '../firebase';
 const router = Router();
 
 /**
- * Struttura Firestore:
- * - userPushTokens/{userId} => { tokens: string[], updatedAt: Timestamp }
- * - notifications/{userId}/items/{notificationId} => { type, title, body, createdAt, read, data }
- */
-
-/**
- * Funzione principale per inviare notifiche a un utente
- * Invia sia push FCM che salva notifica in-app su Firestore
+ * Funzione riusabile: Invia notifica a utente
+ * - Invia push notification via FCM
+ * - Salva notifica in-app su Firestore
+ * - Rimuove automaticamente token invalidi
  * 
  * @param userId - ID utente destinatario
- * @param payload - Dati notifica (type, title, body, data)
+ * @param payload - Contenuto notifica
  */
 export async function sendNotificationToUser(
   userId: string,
@@ -29,194 +23,164 @@ export async function sendNotificationToUser(
     body: string;
     data?: Record<string, string>;
   }
-) {
-  try {
-    // 1. Recupera i token FCM dell'utente
-    const tokenDoc = await db.collection('userPushTokens').doc(userId).get();
-    
-    if (!tokenDoc.exists) {
-      console.log(`No push tokens found for user ${userId}`);
-      return;
-    }
+): Promise<void> {
+  // 1. Recupera token FCM utente
+  const tokenDoc = await db.collection('userPushTokens').doc(userId).get();
 
-    const tokens = (tokenDoc.data()?.tokens as string[]) || [];
-    
-    if (!tokens.length) {
-      console.log(`Empty tokens array for user ${userId}`);
-      return;
-    }
+  if (!tokenDoc.exists) {
+    console.log(`⚠️  No push tokens found for user: ${userId}`);
+    // Continua comunque per salvare notifica in-app
+  }
 
-    // 2. Invia notifica push FCM
+  const tokens = (tokenDoc.data()?.tokens as string[]) || [];
+
+  // 2. Invia notifica push se ci sono token
+  if (tokens.length > 0) {
     try {
       const response = await adminMessaging.sendMulticast({
         tokens,
         notification: {
           title: payload.title,
-          body: payload.body,
+          body: payload.body
         },
         data: {
           ...(payload.data || {}),
-          type: payload.type || 'generic',
+          type: payload.type || 'generic'
         },
-        // Configurazione Android
         android: {
           priority: 'high',
           notification: {
             channelId: 'default',
-            sound: 'default',
-          },
+            sound: 'default'
+          }
         },
-        // Configurazione iOS
         apns: {
           payload: {
             aps: {
               sound: 'default',
-              badge: 1,
-            },
-          },
-        },
+              badge: 1
+            }
+          }
+        }
       });
 
-      console.log(`FCM sent to user ${userId}:`, {
-        successCount: response.successCount,
-        failureCount: response.failureCount,
-      });
+      console.log(
+        `✅ Push notification sent to user ${userId}: ${response.successCount}/${tokens.length} successful`
+      );
 
-      // Rimuovi token non validi
+      // 3. Rimuovi token invalidi
       if (response.failureCount > 0) {
-        const validTokens = tokens.filter((token, index) => {
-          return response.responses[index].success;
+        const validTokens = tokens.filter(
+          (token, index) => response.responses[index].success
+        );
+
+        await db.collection('userPushTokens').doc(userId).update({
+          tokens: validTokens,
+          updatedAt: new Date()
         });
 
-        if (validTokens.length < tokens.length) {
-          await db.collection('userPushTokens').doc(userId).update({
-            tokens: validTokens,
-            updatedAt: new Date(),
-          });
-          
-          console.log(`Removed ${tokens.length - validTokens.length} invalid tokens for user ${userId}`);
-        }
+        console.log(
+          `🧹 Removed ${response.failureCount} invalid tokens for user ${userId}`
+        );
       }
-    } catch (fcmError) {
-      console.error(`FCM send error for user ${userId}:`, fcmError);
-      // Non blocchiamo l'esecuzione, continuiamo con la notifica in-app
+    } catch (err: any) {
+      console.error('❌ FCM push notification error:', err.message);
+      // Continua comunque per salvare notifica in-app
     }
-
-    // 3. Salva notifica in-app su Firestore
-    await db
-      .collection('notifications')
-      .doc(userId)
-      .collection('items')
-      .add({
-        type: payload.type || 'generic',
-        title: payload.title,
-        body: payload.body,
-        data: payload.data || {},
-        createdAt: new Date(),
-        read: false,
-      });
-
-    console.log(`In-app notification saved for user ${userId}`);
-    
-  } catch (error) {
-    console.error(`Error sending notification to user ${userId}:`, error);
-    throw error;
   }
+
+  // 4. Salva notifica in-app su Firestore
+  await db
+    .collection('notifications')
+    .doc(userId)
+    .collection('items')
+    .add({
+      type: payload.type || 'generic',
+      title: payload.title,
+      body: payload.body,
+      data: payload.data || {},
+      createdAt: new Date(),
+      read: false
+    });
+
+  console.log(`✅ In-app notification saved for user ${userId}`);
 }
 
 /**
  * POST /api/notifications/test
- * Endpoint di test per inviare notifica manuale
- * 
- * Body:
- * - userId: string
- * - title: string
- * - body: string
- * - type?: string
+ * Endpoint di test notifiche (rimuovere in produzione)
  */
 router.post('/test', async (req, res) => {
   try {
-    const { userId, title, body, type } = req.body;
-    
+    const { userId, title, body } = req.body;
+
     if (!userId || !title || !body) {
-      return res.status(400).json({ error: 'Missing required parameters: userId, title, body' });
+      return res.status(400).json({ error: 'Missing params: userId, title, body' });
     }
 
     await sendNotificationToUser(userId, {
+      type: 'test',
       title,
-      body,
-      type: type || 'test',
+      body
     });
 
-    return res.json({ 
-      ok: true,
-      message: 'Notification sent successfully',
-    });
-    
-  } catch (error) {
-    console.error('Test notification error:', error);
+    return res.json({ ok: true, message: 'Test notification sent' });
+  } catch (err: any) {
+    console.error('❌ Notification test error:', err.message);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
 /**
  * POST /api/notifications/register-token
- * Registra un nuovo token FCM per un utente
+ * Registra token FCM per utente
  * 
  * Body:
  * - userId: string
- * - token: string
+ * - token: string (FCM device token)
  */
 router.post('/register-token', async (req, res) => {
   try {
     const { userId, token } = req.body;
-    
+
     if (!userId || !token) {
-      return res.status(400).json({ error: 'Missing userId or token' });
+      return res.status(400).json({ error: 'Missing params: userId, token' });
     }
 
-    const docRef = db.collection('userPushTokens').doc(userId);
-    const doc = await docRef.get();
+    // Aggiungi token all'array (evita duplicati con arrayUnion)
+    await db
+      .collection('userPushTokens')
+      .doc(userId)
+      .set(
+        {
+          tokens: admin.firestore.FieldValue.arrayUnion(token),
+          updatedAt: new Date()
+        },
+        { merge: true }
+      );
 
-    if (doc.exists) {
-      const existingTokens = (doc.data()?.tokens as string[]) || [];
-      
-      // Evita duplicati
-      if (!existingTokens.includes(token)) {
-        await docRef.update({
-          tokens: [...existingTokens, token],
-          updatedAt: new Date(),
-        });
-      }
-    } else {
-      await docRef.set({
-        tokens: [token],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-    }
+    console.log(`✅ FCM token registered for user ${userId}`);
 
-    return res.json({ ok: true });
-    
-  } catch (error) {
-    console.error('Register token error:', error);
+    return res.json({ ok: true, message: 'Token registered' });
+  } catch (err: any) {
+    console.error('❌ Register token error:', err.message);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
 /**
  * GET /api/notifications/:userId
- * Recupera notifiche in-app per un utente
+ * Lista notifiche in-app per utente
  * 
  * Query params:
- * - limit?: number (default 20)
- * - onlyUnread?: boolean
+ * - limit?: number (default: 50)
+ * - unreadOnly?: boolean (default: false)
  */
 router.get('/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const onlyUnread = req.query.onlyUnread === 'true';
+    const userId = req.params.userId;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const unreadOnly = req.query.unreadOnly === 'true';
 
     let query = db
       .collection('notifications')
@@ -225,28 +189,27 @@ router.get('/:userId', async (req, res) => {
       .orderBy('createdAt', 'desc')
       .limit(limit);
 
-    if (onlyUnread) {
+    if (unreadOnly) {
       query = query.where('read', '==', false) as any;
     }
 
     const snapshot = await query.get();
-    
-    const notifications = snapshot.docs.map(doc => ({
+
+    const notifications = snapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data(),
+      ...doc.data()
     }));
 
     return res.json(notifications);
-    
-  } catch (error) {
-    console.error('Get notifications error:', error);
+  } catch (err: any) {
+    console.error('❌ Get notifications error:', err.message);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
 /**
  * POST /api/notifications/:userId/:notificationId/mark-read
- * Segna una notifica come letta
+ * Marca notifica come letta
  */
 router.post('/:userId/:notificationId/mark-read', async (req, res) => {
   try {
@@ -259,13 +222,14 @@ router.post('/:userId/:notificationId/mark-read', async (req, res) => {
       .doc(notificationId)
       .update({
         read: true,
-        readAt: new Date(),
+        readAt: new Date()
       });
 
-    return res.json({ ok: true });
-    
-  } catch (error) {
-    console.error('Mark read error:', error);
+    console.log(`✅ Notification ${notificationId} marked as read for user ${userId}`);
+
+    return res.json({ ok: true, message: 'Notification marked as read' });
+  } catch (err: any) {
+    console.error('❌ Mark read error:', err.message);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 });
