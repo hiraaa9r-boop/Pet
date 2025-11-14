@@ -144,9 +144,41 @@ test-results/
 *.test.results.json
 
 # ==========================================
-# Documentation
+# Documentation & Development Artifacts
 # ==========================================
 .vscode/
 KEYS_CONFIGURED.md
 PRODUCTION_READY_CHECKLIST.md
 CREDENTIALS_VAULT.md
+
+# Development session notes (auto-generated during development)
+*_SUMMARY.md
+*_COMPLETE.md
+*_SUMMARY.txt
+RIEPILOGO_*.md
+IMPLEMENTAZIONE_*.md
+ANALISI_*.md
+CONFIGURAZIONE_*.md
+AUDIT_*.md
+STATO_*.md
+VERIFICA_*.md
+REPORT_TECNICO_*.md
+CODICE_PRONTO_USO.md
+FIX_*.md
+IMMEDIATE_ACTIONS.md
+FUNZIONALITA_*.md
+IMPLEMENTAZIONI_*.md
+PRODUZIONE_*.md
+
+# Temporary backup directories
+.backups/
+*_old_*/
+android_old_*/
+
+# Build and deployment logs
+build*.log
+deploy*.log
+*.log
+
+# HTML artifacts
+DOWNLOAD_PAGE.html
