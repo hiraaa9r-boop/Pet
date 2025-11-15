@@ -55,8 +55,8 @@ gcloud --version
 ### 1. Clone del Repository
 
 ```bash
-git clone https://github.com/your-username/my_pet_care.git
-cd my_pet_care
+git clone https://github.com/petcareassistenza-eng/PET-CARE-2.git
+cd PET-CARE-2
 ```
 
 ### 2. Configurazione Firebase
@@ -139,47 +139,87 @@ flutter run -d ios
 ## 🏗️ Struttura del Progetto
 
 ```
-my_pet_care/
-├── lib/
-│   ├── main.dart                    # Entry point
+PET-CARE-2/
+├── lib/                             # Flutter Frontend
+│   ├── main.dart
+│   ├── firebase_options.dart        # Firebase configuration
+│   ├── config.dart                  # App configuration (backend URL, Stripe keys)
 │   ├── models/                      # Data models
-│   │   ├── user_model.dart
-│   │   ├── pro_model.dart
-│   │   ├── service_model.dart
-│   │   ├── booking_model.dart
-│   │   ├── pet_model.dart
-│   │   └── subscription_model.dart
-│   ├── providers/                   # Riverpod providers
+│   ├── providers/                   # State management
 │   ├── screens/                     # UI screens
-│   │   ├── home/
-│   │   ├── auth/
-│   │   ├── pro/
-│   │   ├── booking/
-│   │   ├── profile/
-│   │   ├── pets/
-│   │   ├── subscription/
-│   │   └── admin/
+│   │   ├── home/                    # Home screens (owner/pro)
+│   │   ├── auth/                    # Authentication screens
+│   │   ├── booking/                 # Booking screens
+│   │   ├── subscription/            # Subscription screens
+│   │   └── admin/                   # Admin panel
 │   ├── services/                    # Business logic
 │   │   ├── auth_service.dart
 │   │   └── subscription_service.dart
 │   ├── widgets/                     # Reusable widgets
 │   ├── theme/                       # App theme
-│   │   └── app_theme.dart
-│   ├── router/                      # Navigation
-│   │   └── app_router.dart
+│   ├── router/                      # Navigation (GoRouter)
 │   └── utils/                       # Utilities
-├── assets/
-│   ├── icons/                       # Category icons
-│   ├── images/                      # App images
-│   └── fonts/                       # Custom fonts
-├── backend/                         # Cloud Run backend
+│
+├── android/                         # Android platform configuration
+│   ├── app/
+│   │   ├── build.gradle.kts
+│   │   └── src/main/AndroidManifest.xml
+│   └── keystore/                    # Release keystore (gitignored)
+│
+├── ios/                             # iOS platform configuration
+│   └── Runner/
+│
+├── web/                             # Web platform configuration
+│
+├── assets/                          # App assets
+│   ├── branding/
+│   ├── icons/
+│   ├── images/
+│   └── fonts/
+│
+├── backend/                         # Node.js/TypeScript Backend (Cloud Run)
 │   ├── src/
-│   │   └── index.ts
-│   ├── package.json
-│   └── Dockerfile
-├── firestore.rules                  # Firestore security rules
-├── firestore.indexes.json           # Firestore indexes
-└── DOCUMENTAZIONE_COMPLETA.md       # Complete documentation
+│   │   ├── index.ts                 # Express server entry point
+│   │   ├── config.ts                # Backend configuration
+│   │   ├── firebase.ts              # Firebase Admin SDK
+│   │   ├── auth/
+│   │   │   └── setAdmin.ts          # Script for promoting users to admin
+│   │   ├── routes/                  # API routes
+│   │   │   ├── auth.ts              # Authentication endpoints
+│   │   │   ├── payments.ts          # Payment endpoints
+│   │   │   ├── admin.ts             # Admin-only endpoints
+│   │   │   ├── pros.ts              # PRO management
+│   │   │   ├── bookings.ts          # Booking management
+│   │   │   ├── notifications.ts     # Notification system
+│   │   │   └── gdpr.ts              # GDPR compliance
+│   │   ├── middleware/              # Express middleware
+│   │   │   ├── auth.ts              # JWT verification
+│   │   │   └── cors.ts              # CORS whitelist
+│   │   ├── services/                # Business logic
+│   │   └── utils/                   # Utilities
+│   ├── docs/                        # Backend documentation
+│   │   ├── CLOUD_RUN_DEPLOYMENT_GUIDE.md
+│   │   ├── CLOUD_RUN_ENV_VARS.md    # Environment variables reference
+│   │   ├── CORS_SECURITY_UPDATE.md
+│   │   ├── DEPLOY_QUICK_REFERENCE.md
+│   │   └── LOCAL_TEST_GUIDE.md
+│   ├── package.json                 # Dependencies
+│   ├── tsconfig.json                # TypeScript config
+│   ├── Dockerfile                   # Multi-stage Docker build
+│   ├── .dockerignore
+│   ├── .env.example                 # Environment variables template
+│   ├── deploy-cloudrun.ps1          # PowerShell deployment script
+│   └── deploy-cloudrun-simple.sh    # Bash deployment script
+│
+├── docs/                            # Project documentation
+│   ├── ADMIN_SYSTEM_SETUP.md        # Admin system guide
+│   ├── ADMIN_QUICK_START.md         # Quick admin setup
+│   └── (other docs)
+│
+├── .gitignore                       # Git ignore rules
+├── README.md                        # This file
+├── DEPLOY_QUICK_START.md            # Quick deployment guide
+└── pubspec.yaml                     # Flutter dependencies
 ```
 
 ## 🎨 Branding
@@ -316,16 +356,19 @@ firebase deploy --only hosting
 
 ## 📚 Documentazione
 
-Per documentazione completa, vedi [DOCUMENTAZIONE_COMPLETA.md](DOCUMENTAZIONE_COMPLETA.md)
+### **Guide Principali**
 
-**Sezioni Principali**:
-- Schema Dati Firestore
-- Regole di Sicurezza
-- Sistema Pagamenti
-- Backend API
-- Job Schedulati
-- UI/UX Flow
-- Pannello Admin
+- 🚀 **[DEPLOY_QUICK_START.md](DEPLOY_QUICK_START.md)** - Guida rapida per il deploy completo (Backend + Frontend)
+- 🔐 **[docs/ADMIN_SYSTEM_SETUP.md](docs/ADMIN_SYSTEM_SETUP.md)** - Setup sistema admin con custom claims
+- ⚡ **[docs/ADMIN_QUICK_START.md](docs/ADMIN_QUICK_START.md)** - Quick start per amministratori
+
+### **Backend Documentation**
+
+- 📦 **[backend/docs/CLOUD_RUN_DEPLOYMENT_GUIDE.md](backend/docs/CLOUD_RUN_DEPLOYMENT_GUIDE.md)** - Deploy completo su Cloud Run
+- 🔑 **[backend/docs/CLOUD_RUN_ENV_VARS.md](backend/docs/CLOUD_RUN_ENV_VARS.md)** - Variabili d'ambiente (Firebase, Stripe, PayPal)
+- 🛡️ **[backend/docs/CORS_SECURITY_UPDATE.md](backend/docs/CORS_SECURITY_UPDATE.md)** - Configurazione CORS e sicurezza
+- 🧪 **[backend/docs/LOCAL_TEST_GUIDE.md](backend/docs/LOCAL_TEST_GUIDE.md)** - Testing locale del backend
+- 📝 **[backend/docs/DEPLOY_QUICK_REFERENCE.md](backend/docs/DEPLOY_QUICK_REFERENCE.md)** - Quick reference comandi deploy
 
 ## 🤝 Contributing
 
@@ -354,6 +397,7 @@ Questo progetto è proprietario di MY PET CARE. Tutti i diritti riservati.
 ---
 
 **Versione**: 1.0.0  
-**Ultimo Aggiornamento**: Novembre 2024
+**Ultimo Aggiornamento**: 15 Novembre 2024  
+**Repository**: https://github.com/petcareassistenza-eng/PET-CARE-2
 
 Fatto con ❤️ da MY PET CARE Team

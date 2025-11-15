@@ -119,8 +119,8 @@ lerna-debug.log*
 .pnpm-debug.log*
 
 # Backend build output
-dist/
-lib/
+backend/dist/
+backend/lib/
 *.tsbuildinfo
 
 # ==========================================
@@ -182,3 +182,29 @@ deploy*.log
 
 # HTML artifacts
 DOWNLOAD_PAGE.html
+
+# ==========================================
+# Release Files & Build Artifacts
+# ==========================================
+# APK, AAB, IPA files should not be in repo
+*.apk
+*.aab
+*.ipa
+
+# Archive files (backups, exports)
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Old build directories
+release_files/
+mypetcare_deploy_fix/
+*_deploy_*/
+*_build_*/
+
+# Obsolete script folders
+ops_scripts/
+packages/
+perf/
+web_pages/
