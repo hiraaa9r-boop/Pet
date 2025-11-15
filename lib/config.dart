@@ -8,17 +8,19 @@ class AppConfig {
   static String get effectiveWebUrl => webBaseUrl;
 
   // ==========================================
-  // STRIPE LIVE CONFIGURATION
+  // STRIPE TEST CONFIGURATION
   // ==========================================
-  // Publishable Key (pubblico, safe per client-side)
-  // ⚠️ SOSTITUISCI con la tua chiave da Stripe Dashboard → API Keys
-  static const String stripePublishableKey = 'pk_live_YOUR_STRIPE_PUBLISHABLE_KEY_HERE';
+  // ⚠️ IMPORTANTE: Queste sono chiavi TEST - NON accettano pagamenti reali!
+  // Per passare a LIVE: sostituisci con chiavi da Stripe Dashboard → API Keys (LIVE mode)
   
-  // Price IDs - Da sostituire quando crei i prodotti in Stripe Dashboard
+  // Publishable Key (pubblico, safe per client-side)
+  static const String stripePublishableKey = 'pk_test_51SPft3Lc9uOEhD6QYYeRjm5GDHtW61arr1b2ykzHnap1kkzW8aM7FbFSYDXn6Rj5veLmWfXwh5PifBs3BOdnSSBe00eGgsupFk';
+  
+  // Price IDs - Da creare in Stripe Dashboard (modalità TEST)
   // Formato: price_xxxxxxxxxxxxx
-  // Guida completa: docs/STRIPE-LIVE-SETUP.md
-  static const String stripeMonthlyPriceId = 'price_STRIPE_MENSILE_LIVE'; 
-  static const String stripeYearlyPriceId  = 'price_STRIPE_ANNUALE_LIVE'; 
+  // Guida: Crea prodotti in TEST mode → copia Price IDs
+  static const String stripeMonthlyPriceId = 'price_TEST_MONTHLY'; 
+  static const String stripeYearlyPriceId  = 'price_TEST_YEARLY'; 
 
   // ==========================================
   // PAYPAL LIVE PLAN ID
