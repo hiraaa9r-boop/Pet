@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -122,41 +123,73 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         debugPrint('✅ Utente creato su Firebase Auth: $uid');
       }
 
-      // 2) Prepara dati per backend API
+      // 2) Prepara dati utente
       final fullName = '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}';
       final role = _selectedRole; // 'owner' o 'pro'
-
-      final requestBody = {
-        'uid': uid,
-        'role': role,
-        'fullName': fullName,
-        // Campi telefono rimossi
-        'proEmail': _proEmailController.text.trim(),
-        'website': _websiteController.text.trim(),
-        'notifications': {
-          'push': _pushEnabled,
-          'email': _emailEnabled,
-          'marketing': _marketingEnabled,
-        },
-      };
-
-      if (kDebugMode) {
-        debugPrint('📤 Chiamata backend API: ${AppConfig.backendBaseUrl}/api/auth/register');
-      }
-
-      // 3) Chiama backend API per creare profilo
-      final response = await http.post(
-        Uri.parse('${AppConfig.backendBaseUrl}/api/auth/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(requestBody),
-      );
-
-      if (response.statusCode >= 400) {
-        throw Exception('Errore backend: ${response.statusCode} ${response.body}');
-      }
-
-      if (kDebugMode) {
-        debugPrint('✅ Profilo creato su backend: ${response.body}');
+      
+      // 3) Salva dati direttamente su Firestore (bypass backend per testing)
+      final db = FirebaseFirestore.instance;
+      final now = DateTime.now().toIso8601String();
+      
+      if (role == 'owner') {
+        // Crea profilo Owner su collection 'users'
+        await db.collection('users').doc(uid).set({
+          'uid': uid,
+          'fullName': fullName,
+          'firstName': _firstNameController.text.trim(),
+          'lastName': _lastNameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'role': 'owner',
+          'city': _cityController.text.trim(),
+          'address': _addressController.text.trim(),
+          'notifications': {
+            'push': _pushEnabled,
+            'email': _emailEnabled,
+            'marketing': _marketingEnabled,
+          },
+          'createdAt': now,
+          'updatedAt': now,
+          'active': true,
+        });
+        
+        if (kDebugMode) {
+          debugPrint('✅ Profilo Owner creato su Firestore: $uid');
+        }
+      } else {
+        // Crea profilo PRO su collection 'pros'
+        await db.collection('pros').doc(uid).set({
+          'uid': uid,
+          'fullName': fullName,
+          'firstName': _firstNameController.text.trim(),
+          'lastName': _lastNameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'role': 'pro',
+          'city': _cityController.text.trim(),
+          'address': _addressController.text.trim(),
+          'businessName': _businessNameController.text.trim(),
+          'category': _selectedCategory,
+          'piva': _pivaController.text.trim(),
+          'cf': _cfController.text.trim(),
+          'studioAddress': _studioAddressController.text.trim(),
+          'ordine': _ordineController.text.trim(),
+          'ordineProvince': _ordineProvinceController.text.trim(),
+          'ordineNumber': _ordineNumberController.text.trim(),
+          'proEmail': _proEmailController.text.trim(),
+          'website': _websiteController.text.trim(),
+          'notifications': {
+            'push': _pushEnabled,
+            'email': _emailEnabled,
+            'marketing': _marketingEnabled,
+          },
+          'subscriptionStatus': 'pending', // PRO deve attivare abbonamento
+          'createdAt': now,
+          'updatedAt': now,
+          'active': true,
+        });
+        
+        if (kDebugMode) {
+          debugPrint('✅ Profilo PRO creato su Firestore: $uid');
+        }
       }
 
       // 4) Invia email di verifica
