@@ -1,7 +1,8 @@
 class AppConfig {
   // URL backend e frontend in produzione
-  static const String backendBaseUrl = 'https://api.mypetcareapp.org';
-  static const String webBaseUrl = 'https://app.mypetcareapp.org';
+  // ⚠️ AGGIORNA DOPO DEPLOY: Sostituisci XXXXX con l'ID del tuo servizio Cloud Run
+  static const String backendBaseUrl = 'https://pet-care-api-XXXXX-ew.a.run.app';
+  static const String webBaseUrl = 'https://pet-care-9790d.web.app';
   
   // Getter per compatibilità con codice esistente
   static String get effectiveBackendUrl => backendBaseUrl;
