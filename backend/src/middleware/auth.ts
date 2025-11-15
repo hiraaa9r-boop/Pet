@@ -5,6 +5,7 @@ import { adminAuth, db } from '../firebase';
 export interface AuthUser {
   uid: string;
   role?: 'owner' | 'pro' | 'admin';
+  admin?: boolean; // Custom claim per admin
 }
 
 export interface AuthRequest extends Request {
@@ -25,14 +26,22 @@ export async function requireAuth(
     const token = authHeader.split(' ')[1];
     const decoded = await adminAuth.verifyIdToken(token);
 
+    // Controlla custom claim admin PRIMA del role
+    const isAdmin = decoded.admin === true;
+
     // ruolo da custom claims o da Firestore
     let role = (decoded.role as AuthUser['role']) || undefined;
-    if (!role) {
+    if (!role && !isAdmin) {
       const userDoc = await db.collection('users').doc(decoded.uid).get();
       role = (userDoc.data()?.role as AuthUser['role']) || 'owner';
     }
 
-    req.user = { uid: decoded.uid, role };
+    // Se ha custom claim admin=true, imposta anche role='admin'
+    if (isAdmin && role !== 'admin') {
+      role = 'admin';
+    }
+
+    req.user = { uid: decoded.uid, role, admin: isAdmin };
     next();
   } catch (err) {
     console.error('Auth error', err);
@@ -45,7 +54,8 @@ export function requireAdmin(
   res: Response,
   next: NextFunction
 ) {
-  if (req.user?.role !== 'admin') {
+  // Controlla sia role='admin' sia admin=true custom claim
+  if (req.user?.role !== 'admin' && req.user?.admin !== true) {
     return res.status(403).json({ error: 'Admin only' });
   }
   next();

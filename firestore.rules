@@ -1,78 +1,90 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper functions
+
     function isSignedIn() {
       return request.auth != null;
     }
-    
-    function isOwner(userId) {
-      return request.auth.uid == userId;
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
     }
-    
-    // ==============================================
-    // USERS COLLECTION
-    // ==============================================
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // USERS (profilo base)
     match /users/{userId} {
-      // Allow read for authenticated users
-      allow read: if isSignedIn();
-      
-      // Allow write only for the user themselves
-      allow write: if isOwner(userId);
-      
-      // Pets subcollection
-      match /pets/{petId} {
-        // Only the pet owner can read/write their pets
-        allow read, write: if isOwner(userId);
-      }
+      allow create: if isSignedIn() && isOwner(userId);
+      allow read, update, delete: if isOwner(userId) || isAdmin();
     }
-    
-    // ==============================================
-    // PROFESSIONALS COLLECTION
-    // ==============================================
-    match /professionals/{proId} {
-      // Everyone can read professionals (for search/map)
-      allow read: if isSignedIn();
-      
-      // Only the professional can write their own profile
-      allow write: if isOwner(proId);
-      
-      // Allow creation if authenticated
+
+    // PROS (profili professionisti)
+    match /pros/{proId} {
+      // elenco pro è pubblico in lettura
+      allow read: if true;
+
+      // creazione/aggiornamento solo del proprio profilo o admin
       allow create: if isSignedIn();
+      allow update, delete: if isOwner(proId) || isAdmin();
     }
-    
-    // ==============================================
-    // BOOKINGS COLLECTION
-    // ==============================================
+
+    // BOOKINGS (prenotazioni)
     match /bookings/{bookingId} {
-      // Can read if you're the user OR the professional
-      allow read: if isSignedIn() && (
-        resource.data.userId == request.auth.uid ||
-        resource.data.proId == request.auth.uid
-      );
-      
-      // Users can create bookings
-      allow create: if isSignedIn() && 
-        request.resource.data.userId == request.auth.uid;
-      
-      // Professionals can update status of their bookings
-      allow update: if isSignedIn() && 
-        resource.data.proId == request.auth.uid;
-      
-      // Only the user who created can delete (cancel)
-      allow delete: if isSignedIn() && 
-        resource.data.userId == request.auth.uid;
+      allow read, update, delete: if isSignedIn() &&
+        (
+          request.auth.uid == resource.data.ownerId ||
+          request.auth.uid == resource.data.proId ||
+          isAdmin()
+        );
+
+      allow create: if isSignedIn() &&
+        (
+          request.auth.uid == request.resource.data.ownerId ||
+          isAdmin()
+        );
     }
-    
-    // ==============================================
-    // REVIEWS COLLECTION (Future)
-    // ==============================================
+
+    // CALENDARS (disponibilità PRO)
+    match /calendars/{proId}/slots/{slotId} {
+      // tutti possono leggere le disponibilità
+      allow read: if true;
+
+      // scrivere solo il PRO proprietario o admin
+      allow create, update, delete: if isOwner(proId) || isAdmin();
+    }
+
+    // LOCKS (blocchi temporanei slot)
+    match /calendars/{proId}/locks/{lockId} {
+      // visibile solo al pro e admin
+      allow read: if isOwner(proId) || isAdmin();
+      allow create, update, delete: if isOwner(proId) || isAdmin();
+    }
+
+    // REVIEWS (recensioni)
     match /reviews/{reviewId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && 
-        resource.data.userId == request.auth.uid;
+      allow read: if true;
+
+      allow create: if isSignedIn() &&
+        request.auth.uid == request.resource.data.ownerId;
+
+      allow update, delete: if isSignedIn() &&
+        (
+          request.auth.uid == resource.data.ownerId ||
+          isAdmin()
+        );
+    }
+
+    // COUPONS (gestiti solo da admin)
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // CATCH-ALL: tutto il resto è negato
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

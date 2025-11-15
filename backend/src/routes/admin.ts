@@ -58,6 +58,36 @@ router.post('/pros/:id/approve', async (req, res) => {
   }
 });
 
+// Cambia stato PRO (approved / disabled / pending)
+router.post('/pros/:id/status', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { status } = req.body;
+
+    // Validazione stati permessi
+    if (!['approved', 'disabled', 'pending'].includes(status)) {
+      return res.status(400).json({ 
+        error: 'Invalid status', 
+        allowed: ['approved', 'disabled', 'pending'] 
+      });
+    }
+
+    const updateData: any = { status };
+    
+    // Se approved, aggiungi timestamp
+    if (status === 'approved') {
+      updateData.approvedAt = new Date();
+    }
+
+    await db.collection('pros').doc(id).update(updateData);
+    
+    return res.json({ ok: true, status });
+  } catch (err) {
+    console.error('Admin change PRO status error', err);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 // COUPONS
 router.get('/coupons', async (_req, res) => {
   try {

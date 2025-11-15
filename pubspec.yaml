@@ -9,7 +9,7 @@ issue_tracker: https://github.com/[username]/my_pet_care/issues
 # Legal & Support URLs
 # Privacy Policy: https://mypetcareapp.org/privacy
 # Terms of Service: https://mypetcareapp.org/terms
-# Support Email: support@mypetcareapp.org
+# Support Email: petcareassistenza@gmail.com
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -52,22 +52,34 @@ flutter:
     - assets/images/
     - assets/logo/
     - assets/icons/
-  # fonts:
-  #   - family: Poppins
-  #     fonts:
-  #       - asset: assets/fonts/Poppins-Regular.ttf
-  #   - family: Inter
-  #     fonts:
-  #       - asset: assets/fonts/Inter-Regular.ttf
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
 
 # ---------- APP ICONS (flutter_launcher_icons) ----------
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/icons/pet_care_icon_512_bordered.png"      # Android base
-  image_path_ios: "assets/icons/pet_care_icon_1024_bordered.png" # iOS richiede 1024x1024
-  remove_alpha_ios: true                                          # iOS non ammette trasparenza
+  image_path: "assets/icons/pet_care_icon_1024_bordered.png"
   min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/icons/pet_care_icon_512_bordered.png"
+    background_color: "#0F6259"
+    theme_color: "#0F6259"
+  windows:
+    generate: true
+    image_path: "assets/icons/pet_care_icon_512_bordered.png"
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/icons/pet_care_icon_1024_bordered.png"
 
 # ---------- SPLASH SCREEN (flutter_native_splash) ----------
 flutter_native_splash:

@@ -1,8 +1,6 @@
-// backend/src/payments/stripe.ts
 import Stripe from "stripe";
 import { Request, Response } from "express";
 import { config } from "../config";
-import { db } from "../firebase";
 
 const stripe = new Stripe(config.stripeSecretKey, {
   apiVersion: "2024-06-20",
@@ -10,38 +8,28 @@ const stripe = new Stripe(config.stripeSecretKey, {
 
 export async function createStripeCheckoutSession(req: Request, res: Response) {
   try {
-    const { priceId, successUrl, cancelUrl, customerEmail, metadata } = req.body;
-
-    if (!priceId) {
-      return res.status(400).json({ error: "Missing priceId" });
-    }
+    const { priceId, successUrl, cancelUrl, customerEmail } = req.body;
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: successUrl || `${config.webBaseUrl}/subscribe/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: cancelUrl || `${config.webBaseUrl}/subscribe/cancel`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       customer_email: customerEmail,
       allow_promotion_codes: true,
-      metadata: metadata || {},
     });
 
-    return res.json({ url: session.url, sessionId: session.id });
-  } catch (err: any) {
+    return res.json({ url: session.url });
+  } catch (err) {
     console.error("Stripe checkout error", err);
-    return res.status(500).json({ 
-      error: "Stripe checkout failed",
-      message: err.message 
-    });
+    return res.status(500).json({ error: "Stripe checkout failed" });
   }
 }
 
 export async function stripeWebhook(req: Request, res: Response) {
   const sig = req.headers["stripe-signature"] as string | undefined;
 
-  if (!sig) {
-    return res.status(400).send("Missing Stripe signature");
-  }
+  if (!sig) return res.status(400).send("Missing Stripe signature");
 
   let event: Stripe.Event;
   try {
@@ -58,96 +46,19 @@ export async function stripeWebhook(req: Request, res: Response) {
   try {
     switch (event.type) {
       case "customer.subscription.created":
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const proId = subscription.metadata?.proId;
-
-        if (proId) {
-          const status = subscription.status === "active" || subscription.status === "trialing" 
-            ? "active" 
-            : "inactive";
-
-          await db.collection(config.collections.pros).doc(proId).update({
-            subscriptionStatus: status,
-            subscriptionProvider: "stripe",
-            subscriptionPlan: subscription.items.data[0]?.price.id || null,
-            stripeCustomerId: subscription.customer as string,
-            stripeSubscriptionId: subscription.id,
-            currentPeriodStart: new Date(subscription.current_period_start * 1000),
-            currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-            cancelAtPeriodEnd: subscription.cancel_at_period_end,
-            updatedAt: new Date(),
-          });
-
-          console.log(`Stripe subscription ${event.type} for PRO ${proId}: ${status}`);
-        }
-        break;
-      }
-
+      case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
-        const proId = subscription.metadata?.proId;
-
-        if (proId) {
-          await db.collection(config.collections.pros).doc(proId).update({
-            subscriptionStatus: "inactive",
-            updatedAt: new Date(),
-          });
-
-          console.log(`Stripe subscription deleted for PRO ${proId}`);
-        }
+        // TODO: aggiorna Firestore con subscriptionStatus
         break;
       }
-
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = invoice.subscription as string;
-
-        if (subscriptionId) {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const proId = subscription.metadata?.proId;
-
-          if (proId) {
-            await db.collection(config.collections.pros).doc(proId).update({
-              lastPaymentAt: new Date(),
-              lastPaymentAmount: invoice.amount_paid / 100,
-              lastPaymentCurrency: invoice.currency.toUpperCase(),
-              updatedAt: new Date(),
-            });
-
-            console.log(`Stripe payment succeeded for PRO ${proId}`);
-          }
-        }
-        break;
-      }
-
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
-        const subscriptionId = invoice.subscription as string;
-
-        if (subscriptionId) {
-          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const proId = subscription.metadata?.proId;
-
-          if (proId) {
-            await db.collection(config.collections.pros).doc(proId).update({
-              subscriptionStatus: "past_due",
-              updatedAt: new Date(),
-            });
-
-            console.log(`Stripe payment failed for PRO ${proId}`);
-          }
-        }
-        break;
-      }
-
       default:
         console.log(`Unhandled Stripe event type ${event.type}`);
     }
 
     res.json({ received: true });
-  } catch (err: any) {
-    console.error("Error handling Stripe webhook", err);
+  } catch (err) {
+    console.error("Stripe webhook error", err);
     res.status(500).send("Webhook handler error");
   }
 }
