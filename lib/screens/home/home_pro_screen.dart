@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/gdpr_actions.dart';
+import '../../widgets/booking_card.dart';
 import '../../services/auth_service.dart';
 import '../../models/app_user.dart';
+import '../profile/profile_edit_page.dart';
 
 class HomeProScreen extends StatefulWidget {
   static const routeName = '/homePro';
@@ -118,11 +121,60 @@ class _ProCalendarScreen extends StatelessWidget {
   }
 }
 
-class _ProBookingsScreen extends StatelessWidget {
+class _ProBookingsScreen extends StatefulWidget {
   const _ProBookingsScreen();
 
   @override
+  State<_ProBookingsScreen> createState() => _ProBookingsScreenState();
+}
+
+class _ProBookingsScreenState extends State<_ProBookingsScreen> {
+  final _authService = AuthService();
+  String _selectedFilter = 'all'; // all, pending, confirmed, completed
+
+  final Map<String, String> _filterLabels = {
+    'all': 'Tutte',
+    'pending': 'In attesa',
+    'confirmed': 'Confermate',
+    'completed': 'Completate',
+  };
+
+  void _showFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Filtra prenotazioni'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: _filterLabels.entries.map((entry) {
+            return RadioListTile<String>(
+              title: Text(entry.value),
+              value: entry.key,
+              groupValue: _selectedFilter,
+              activeColor: const Color(0xFF0F6259),
+              onChanged: (value) {
+                setState(() => _selectedFilter = value!);
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final currentUser = _authService.currentFirebaseUser;
+    
+    if (currentUser == null) {
+      return const Scaffold(
+        body: Center(
+          child: Text('Errore: Utente non autenticato'),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -131,6 +183,9 @@ class _ProBookingsScreen extends StatelessWidget {
               'assets/images/my_pet_care_app_icon.png',
               height: 32,
               fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(Icons.pets, size: 32);
+              },
             ),
             const SizedBox(width: 12),
             const Text('Prenotazioni'),
@@ -139,46 +194,118 @@ class _ProBookingsScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.filter_list),
-            onPressed: () {
-              // TODO: Filtri prenotazioni (pending, confirmed, completed)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Filtri prenotazioni - TODO')),
-              );
-            },
+            onPressed: _showFilterDialog,
           ),
         ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.event_note, size: 64, color: Color(0xFF0F6259)),
-            const SizedBox(height: 16),
-            const Text(
-              'Le Tue Prenotazioni',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                'Qui vedrai tutte le prenotazioni ricevute dai clienti, con possibilità di confermare, rifiutare o completare.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.black54),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: _getBookingsStream(currentUser.uid),
+        builder: (context, snapshot) {
+          // Loading state
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          // Error state
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.red,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Errore caricamento:\n${snapshot.error}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                // TODO: Collega al tuo widget lista bookings esistente
+            );
+          }
+
+          // Empty state
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.event_available,
+                    size: 64,
+                    color: Color(0xFF0F6259),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _selectedFilter == 'all'
+                        ? 'Nessuna prenotazione'
+                        : 'Nessuna prenotazione ${_filterLabels[_selectedFilter]?.toLowerCase()}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      'Le prenotazioni ricevute dai clienti appariranno qui.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          // Data state
+          final bookings = snapshot.data!.docs;
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              // Il StreamBuilder si aggiornerà automaticamente
+              await Future.delayed(const Duration(milliseconds: 500));
+            },
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              itemCount: bookings.length,
+              itemBuilder: (context, index) {
+                final booking = bookings[index];
+                return BookingCard(
+                  key: ValueKey(booking.id),
+                  bookingId: booking.id,
+                  bookingData: booking.data() as Map<String, dynamic>,
+                  onRefresh: () {
+                    // Il StreamBuilder si aggiornerà automaticamente
+                  },
+                );
               },
-              icon: const Icon(Icons.refresh),
-              label: const Text('Carica Prenotazioni'),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
+  }
+
+  Stream<QuerySnapshot> _getBookingsStream(String proId) {
+    Query query = FirebaseFirestore.instance
+        .collection('bookings')
+        .where('proId', isEqualTo: proId);
+
+    // Applica filtro status
+    if (_selectedFilter != 'all') {
+      query = query.where('status', isEqualTo: _selectedFilter);
+    }
+
+    // Ordina per data creazione (più recenti prima)
+    return query.orderBy('createdAt', descending: true).snapshots();
   }
 }
 
@@ -235,11 +362,43 @@ class _ProProfileScreenState extends State<_ProProfileScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () {
-              // TODO: Modifica profilo
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Modifica profilo - TODO')),
-              );
+            onPressed: () async {
+              // Carica dati correnti PRO
+              final currentUser = _authService.currentFirebaseUser;
+              if (currentUser == null) return;
+
+              try {
+                final proDoc = await FirebaseFirestore.instance
+                    .collection('pros')
+                    .doc(currentUser.uid)
+                    .get();
+
+                if (!mounted) return;
+
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfileEditPage(
+                      isPro: true,
+                      currentData: proDoc.data(),
+                    ),
+                  ),
+                );
+
+                // Se il salvataggio è riuscito, ricarica i dati
+                if (result == true) {
+                  _loadUser();
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Errore caricamento profilo: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
           ),
         ],

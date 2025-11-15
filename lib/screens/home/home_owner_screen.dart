@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/gdpr_actions.dart';
+import '../../widgets/pro_map_widget.dart';
 import '../../services/auth_service.dart';
 import '../../models/app_user.dart';
+import '../profile/profile_edit_page.dart';
 
 class HomeOwnerScreen extends StatefulWidget {
   static const routeName = '/homeOwner';
@@ -48,7 +51,7 @@ class _HomeOwnerScreenState extends State<HomeOwnerScreen> {
   }
 }
 
-// 🔍 Stub mappa (collega poi al tuo widget di Google Maps + filtri)
+// 🗺️ Mappa Google Maps con PRO attivi
 class _OwnerMapScreen extends StatelessWidget {
   const _OwnerMapScreen();
 
@@ -62,53 +65,16 @@ class _OwnerMapScreen extends StatelessWidget {
               'assets/images/my_pet_care_app_icon.png',
               height: 32,
               fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(Icons.pets, size: 32);
+              },
             ),
             const SizedBox(width: 12),
             const Text('Trova Professionisti'),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () {
-              // TODO: Apri dialog filtri (servizi, distanza, rating)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Filtri mappa - TODO')),
-              );
-            },
-          ),
-        ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.map, size: 64, color: Color(0xFF0F6259)),
-            const SizedBox(height: 16),
-            const Text(
-              'Mappa Professionisti',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                'Qui verrà integrata la tua mappa Google Maps con i marker dei professionisti e i filtri di ricerca.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.black54),
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                // TODO: Collega al tuo widget mappa esistente
-              },
-              icon: const Icon(Icons.explore),
-              label: const Text('Carica Mappa'),
-            ),
-          ],
-        ),
-      ),
+      body: const ProMapWidget(),
     );
   }
 }
@@ -280,6 +246,49 @@ class _OwnerProfileScreenState extends State<_OwnerProfileScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Prenotazioni - TODO')),
                 );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('Modifica Profilo'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                // Carica dati correnti Owner
+                final currentUser = _authService.currentFirebaseUser;
+                if (currentUser == null) return;
+
+                try {
+                  final userDoc = await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(currentUser.uid)
+                      .get();
+
+                  if (!context.mounted) return;
+
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ProfileEditPage(
+                        isPro: false,
+                        currentData: userDoc.data(),
+                      ),
+                    ),
+                  );
+
+                  // Se il salvataggio è riuscito, ricarica i dati
+                  if (result == true) {
+                    _loadUser();
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Errore caricamento profilo: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
               },
             ),
             ListTile(
