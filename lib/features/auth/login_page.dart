@@ -12,6 +12,7 @@ import '../../screens/subscription_screen.dart';
 /// - Redirect intelligente (Owner vs Pro)
 /// - Controllo abbonamento per PRO
 /// - Link Registrati + Password dimenticata + Privacy/Termini
+/// - Aggiunto il pulsante di demo login
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -27,6 +28,10 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
+  // Demo Credentials
+  static const String demoEmail = "demo@mypetcare.com";
+  static const String demoPassword = "Demo1234";
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -36,7 +41,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
 
@@ -107,7 +112,7 @@ class _LoginPageState extends State<LoginPage> {
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage;
-      
+
       switch (e.code) {
         case 'user-not-found':
           errorMessage = 'Utente non trovato. Verifica l\'email o registrati.';
@@ -153,6 +158,15 @@ class _LoginPageState extends State<LoginPage> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Function to quickly login using demo credentials
+  void _demoLogin() {
+    setState(() {
+      _emailController.text = demoEmail;
+      _passwordController.text = demoPassword;
+    });
+    _login();
   }
 
   @override
@@ -217,7 +231,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                     ),
                     const SizedBox(height: 32),
-                    
+
                     // Email Field
                     TextFormField(
                       controller: _emailController,
@@ -238,7 +252,7 @@ class _LoginPageState extends State<LoginPage> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Password Field
                     TextFormField(
                       controller: _passwordController,
@@ -247,8 +261,8 @@ class _LoginPageState extends State<LoginPage> {
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscurePassword 
-                                ? Icons.visibility_outlined 
+                            _obscurePassword
+                                ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
                           ),
                           onPressed: () {
@@ -270,7 +284,7 @@ class _LoginPageState extends State<LoginPage> {
                       },
                     ),
                     const SizedBox(height: 12),
-                    
+
                     // Password dimenticata
                     Align(
                       alignment: Alignment.centerRight,
@@ -280,16 +294,26 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    
+
                     // Pulsante Login
                     _isLoading
                         ? const Center(child: CircularProgressIndicator())
-                        : PrimaryButton(
-                            label: 'Accedi',
-                            onPressed: _login,
+                        : Column(
+                            children: [
+                              PrimaryButton(
+                                label: 'Accedi',
+                                onPressed: _login,
+                              ),
+                              const SizedBox(height: 12),
+                              PrimaryButton(
+                                label: 'Demo Login',
+                                onPressed: _demoLogin,
+                                backgroundColor: Colors.amber,
+                              ),
+                            ],
                           ),
                     const SizedBox(height: 24),
-                    
+
                     // Link Registrazione
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -302,7 +326,7 @@ class _LoginPageState extends State<LoginPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Link Privacy & Termini
                     Wrap(
                       alignment: WrapAlignment.center,
